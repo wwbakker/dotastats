@@ -1,10 +1,13 @@
-import DotaApiRepo.DotaApiRepo
-import VisualizationService.NamedWinLoss
+package nl.wwbakker.commandline
+
+import nl.wwbakker.dota.{DotaApiRepo, VisualizationService}
+import nl.wwbakker.dota.DotaApiRepo.DotaApiRepo
+import nl.wwbakker.dota.VisualizationService.NamedWinLoss
 import sttp.client3.asynchttpclient.zio.{AsyncHttpClientZioBackend, SttpClient}
-import zio.console._
+import zio.console.{Console, putStrLn}
 import zio.{ZIO, ZLayer}
 
-object DotaBotZ extends zio.App {
+object CommandLineApp extends zio.App {
 
   val wesselId = 21842016
   val numberOfDaysInThePast = 14

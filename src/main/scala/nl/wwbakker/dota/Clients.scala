@@ -1,3 +1,5 @@
+package nl.wwbakker.dota
+
 import sttp.capabilities.WebSockets
 import sttp.capabilities.zio.ZioStreams
 import sttp.client3.SttpBackend
