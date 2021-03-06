@@ -5,7 +5,9 @@ import ackcord.requests.{CreateMessage, CreateMessageData, Request}
 import ackcord.{APIMessage, CacheSnapshot, ClientSettings, DiscordClient}
 import nl.wwbakker.services.dota.DotaApiRepo.DotaApiRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.DotaMatchRepoEnv
-import nl.wwbakker.services.dota.{DotaApiRepo, DotaMatchesRepo}
+import nl.wwbakker.services.dota.HeroRepo.HeroRepoEnv
+import nl.wwbakker.services.dota.MatchStatsService.MatchStatsServiceEnv
+import nl.wwbakker.services.dota.{DotaApiRepo, DotaMatchesRepo, MatchStatsService}
 import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
 import os.Path
 import sttp.client3.asynchttpclient.zio.SttpClient
@@ -20,8 +22,8 @@ object DiscordBot extends App {
   val token: String = os.read(tokenPath)
   val clientId: UserId = UserId(token.split('.').headOption.map(Base64.getDecoder.decode).map(new String(_)).get)
   val clientSettings: ClientSettings = ClientSettings(token)
-  lazy val zioDependencies: ZLayer[Any, DotabotError, SttpClient with DotaApiRepo with LocalStorageRepo with DotaMatchRepoEnv] =
-    (DotaApiRepo.dependencies ++ DotaMatchesRepo.dependencies).mapError(TechnicalError.apply)
+  val zioDependencies: ZLayer[Any, TechnicalError, SttpClient with DotaApiRepo with LocalStorageRepo with DotaMatchRepoEnv with HeroRepoEnv with MatchStatsServiceEnv] =
+    (DotaApiRepo.dependencies ++ DotaMatchesRepo.dependencies ++ MatchStatsService.dependencies ++ MatchStatsService.live).mapError(TechnicalError.apply)
 
   import clientSettings.executionContext
 

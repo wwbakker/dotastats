@@ -43,7 +43,7 @@ object DotaApiRepo {
   }
 
   // implementation
-  val live: ZLayer[SttpClient, Throwable, DotaApiRepo] = ZLayer.succeed(
+  val live: ZLayer[SttpClient, Nothing, DotaApiRepo] = ZLayer.succeed(
     new Service {
       override def winLoss(playerId: Int, numberOfDaysInThePast: Int): ZIO[SttpClient, Throwable, WinLoss] =
         callServiceAndDecode[WinLoss](uri"https://api.opendota.com/api/players/$playerId/wl?significant=0&date=$numberOfDaysInThePast")

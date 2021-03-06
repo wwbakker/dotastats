@@ -16,7 +16,9 @@ import java.util.TimeZone
 object DotaMatchesRepo {
   private val numberOfGamesCutOff = 50
 
-  case class Match(match_id: Long, start_time: Int, duration: Int) {
+  case class Player(account_id: Option[Int], personaname: Option[String], hero_id: Int, win: Int, lose: Int)
+
+  case class Match(match_id: Long, start_time: Int, duration: Int, players: Seq[Player]) {
     def startTimeText: String =
       LocalDateTime.ofInstant(Instant.ofEpochMilli(start_time * 1000L),
         TimeZone.getDefault.toZoneId).toString
