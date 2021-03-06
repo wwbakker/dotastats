@@ -1,8 +1,8 @@
 package nl.wwbakker.commandline
 
-import nl.wwbakker.dota.{DotaApiRepo, VisualizationService}
-import nl.wwbakker.dota.DotaApiRepo.DotaApiRepo
-import nl.wwbakker.dota.VisualizationService.NamedWinLoss
+import nl.wwbakker.services.dota.{DotaApiRepo, VisualizationService}
+import nl.wwbakker.services.dota.DotaApiRepo.DotaApiRepo
+import nl.wwbakker.services.dota.VisualizationService.NamedWinLoss
 import sttp.client3.asynchttpclient.zio.{AsyncHttpClientZioBackend, SttpClient}
 import zio.console.{Console, putStrLn}
 import zio.{ZIO, ZLayer}

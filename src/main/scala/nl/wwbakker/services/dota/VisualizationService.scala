@@ -1,6 +1,6 @@
-package nl.wwbakker.dota
+package nl.wwbakker.services.dota
 
-import nl.wwbakker.dota.DotaApiRepo.{Peer, WinLoss}
+import nl.wwbakker.services.dota.DotaApiRepo.{Peer, WinLoss}
 import zio.{UIO, ZIO}
 
 object VisualizationService {

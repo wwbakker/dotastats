@@ -1,4 +1,4 @@
-package nl.wwbakker.dota
+package nl.wwbakker.services.dota
 
 import sttp.capabilities.WebSockets
 import sttp.capabilities.zio.ZioStreams
