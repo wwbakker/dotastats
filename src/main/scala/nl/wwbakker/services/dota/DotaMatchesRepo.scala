@@ -14,7 +14,7 @@ import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
 
 object DotaMatchesRepo {
-  private val numberOfGamesCutOff = 50
+  private val numberOfGamesCutOff = 100
 
   case class Player(account_id: Option[Int], personaname: Option[String], hero_id: Int, win: Int, lose: Int)
 
@@ -41,7 +41,7 @@ object DotaMatchesRepo {
         retrievedMatchDataAsString   <- ZIO.foreachPar(matchIdsToRetrieve)(dotaApiRepo.rawMatch)
         _                            <- ZIO.foreach(retrievedMatchDataAsString)(localStorageRepo.add)
         retrievedMatches             <- ZIO.foreachPar(retrievedMatchDataAsString)(decodeTo[Match])
-      } yield decodedCachedMatches :++ retrievedMatches
+      } yield (decodedCachedMatches :++ retrievedMatches).take(numberOfGamesCutOff)
 
     private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
       IO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)

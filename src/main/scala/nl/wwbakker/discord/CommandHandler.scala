@@ -26,9 +26,9 @@ object CommandHandler {
       case "favheroes" :: Nil =>
         MatchStatsService.favoriteHeroes
       case "lowestwinrateheroes" :: Nil =>
-        MatchStatsService.lowestWinrateHeroes
+        MatchStatsService.heroWinrates(highestToLowest = false)
       case "highestwinrateheroes" :: Nil =>
-        MatchStatsService.highestWinrateHeroes
+        MatchStatsService.heroWinrates(highestToLowest = true)
       case "latestmatches" :: Nil =>
         printLatestMatches
       case _ =>
