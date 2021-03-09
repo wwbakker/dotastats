@@ -3,10 +3,10 @@ package nl.wwbakker.services.dota
 import nl.wwbakker.services.dota.DotaApiRepo.DotaApiRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.{DotaMatchRepoEnv, Match, Player}
 import nl.wwbakker.services.dota.HeroRepo.{Hero, HeroRepoEnv}
-import nl.wwbakker.services.dota.MatchStatsService.HeroStats.HeroStat
+import nl.wwbakker.services.dota.MatchStatsService.HeroStats.HeroStatGetter
 import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
 import sttp.client3.asynchttpclient.zio.SttpClient
-import zio.{Has, UIO, ULayer, URIO, ZIO, ZLayer}
+import zio.{Has, Task, UIO, ULayer, URIO, ZIO, ZLayer}
 
 object MatchStatsService {
   private val wesselId = 21842016
@@ -26,15 +26,17 @@ object MatchStatsService {
 
     def favoriteHeroes: ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
 
-    def heroWinRates(heroStat: Hero => String, highestToLowest : Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
+    def heroWinRatesGroupedByPlayer(heroStat: Hero => String, highestToLowest : Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
+
+    def heroWinRatesOverall(enemyTeam: Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
   }
 
   object HeroStats {
-    type HeroStat = Hero => String
-    def name : HeroStat = _.localized_name
-    def primaryAttribute : HeroStat = _.primary_attr
-    def attackType : HeroStat = _.attack_type
-    def numberOfLegs : HeroStat = _.legs.toString
+    type HeroStatGetter = Hero => String
+    def name : HeroStatGetter = _.localized_name
+    def primaryAttribute : HeroStatGetter = _.primary_attr
+    def attackType : HeroStatGetter = _.attack_type
+    def numberOfLegs : HeroStatGetter = _.legs.toString
 
     private val statsMap = Map(
       "hero" -> name,
@@ -43,7 +45,7 @@ object MatchStatsService {
       "numberOfLegs" -> numberOfLegs
     )
 
-    def fromStatName(statName : String) : Option[HeroStat] = statsMap.get(statName)
+    def fromStatName(statName : String) : Option[HeroStatGetter] = statsMap.get(statName)
     val possibilities: Seq[String] = statsMap.keys.toSeq
   }
 
@@ -95,14 +97,14 @@ object MatchStatsService {
                |$results""".stripMargin
           }
 
-        override def heroWinRates(heroStat: HeroStat, highestToLowest : Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
+        override def heroWinRatesGroupedByPlayer(heroStat: HeroStatGetter, highestToLowest : Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
           for {
             allGames <- DotaMatchesRepo.latestGames(wesselId)
             allHeroes <- HeroRepo.heroes
             results <- ZIO.foreachPar(matchSubjects)(heroWinrateForPlayer(allGames, allHeroes, _, heroStat, highestToLowest))
           } yield results.mkString("\n")
 
-        private def heroWinrateForPlayer(matches : Seq[Match], heroes : Seq[Hero], playerId: Int, heroStat : HeroStat, highToLow : Boolean) : ZIO[Any, Nothing, String] = for {
+        private def heroWinrateForPlayer(matches : Seq[Match], heroes : Seq[Hero], playerId: Int, heroStat : HeroStatGetter, highToLow : Boolean) : ZIO[Any, Nothing, String] = for {
           playerSpecificResults         <- playerSpecificResults(matches, playerId)
           heroesWinsLosses              <- heroStatWinsLosses(playerSpecificResults, heroes, heroStat)
           heroesWinsLossesGrouped       <- groupByWinrate(heroesWinsLosses)
@@ -112,13 +114,14 @@ object MatchStatsService {
           resultsPerHeroWithPlayerName  <- addPlayerName(resultsPerHero, playerSpecificResults)
         } yield resultsPerHeroWithPlayerName
 
+
         private def playerSpecificResults(matches : Seq[Match], playerId : Int): UIO[Seq[Player]] =
           ZIO.succeed(matches.flatMap(_.players.find(_.account_id.contains(playerId))))
 
-        private def heroStatWinsLosses(playerSpecificResults: Seq[Player], heroes : Seq[Hero], heroStat : HeroStat): UIO[Seq[HeroStatWinrate]] =
+        private def heroStatWinsLosses(playerSpecificResults: Seq[Player], heroes : Seq[Hero], heroStatGetter : HeroStatGetter): UIO[Seq[HeroStatWinrate]] =
           ZIO.succeed {
             // for example: ("agi" -> Seq(heroId3, heroId6, heroId7))
-            val heroesGroupedPerStatValue = playerSpecificResults.map(_.hero_id).groupBy(heroId => resolveHeroStat(heroes, heroId, heroStat))
+            val heroesGroupedPerStatValue = playerSpecificResults.map(_.hero_id).groupBy(heroId => resolveHeroStat(heroes, heroId, heroStatGetter))
             heroesGroupedPerStatValue.map{ case (heroStatValue, heroIdsThatMatchStat) =>
               val numberOfTimesPlayed = playerSpecificResults.count(psr => heroIdsThatMatchStat.contains(psr.hero_id))
               val numberOfTimesWon = playerSpecificResults.filter(_.win == 1).count(psr => heroIdsThatMatchStat.contains(psr.hero_id))
@@ -132,6 +135,9 @@ object MatchStatsService {
 
         private def groupByWinrate(heroWinrates: Seq[HeroStatWinrate]): UIO[Seq[(Long, Seq[HeroStatWinrate])]] =
           ZIO.succeed(heroWinrates.groupBy(_.winrate).toSeq)
+
+        private def groupAndOrderByWinrateBucket(heroWinrates: Seq[HeroStatWinrate]): UIO[Seq[(Long, Seq[HeroStatWinrate])]] =
+          ZIO.succeed(heroWinrates.groupBy(hsw => Math.round(hsw.winrate / 10d) * 10).toSeq.sortBy(_._1))
 
         private def top5[A, B](results: Seq[A])(f: A => B)(implicit ord: Ordering[B]): UIO[Seq[A]] =
           ZIO.succeed(results.sortBy(f).reverse.take(5))
@@ -148,7 +154,7 @@ object MatchStatsService {
         private def resultsText(heroNamesWithWinrate: Seq[(Long, Seq[HeroStatWinrate])]): UIO[String] =
           ZIO.succeed(
             heroNamesWithWinrate.map{case (winrate, heroesWithWinrates) =>
-              s"$winrate% winrate: " + heroesWithWinrates.map(hero => s"${hero.heroName} ${hero.wins}-${hero.total - hero.wins}").mkString(", ")
+              s"__$winrate% winrate__: " + heroesWithWinrates.map(hero => s"${hero.heroName} ${hero.wins}-${hero.total - hero.wins}").mkString(", ")
             }
               .mkString("\n")
           )
@@ -159,6 +165,46 @@ object MatchStatsService {
             s"""**$playerName**
                |$resultsText""".stripMargin
           }
+
+        override def heroWinRatesOverall(enemyTeam: Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
+          for {
+            allGames <- DotaMatchesRepo.latestGames(wesselId)
+            allHeroes <- HeroRepo.heroes
+            results <- heroWinrateOverall(allGames, allHeroes, wesselId, enemyTeam)
+          } yield results
+
+        private def heroWinrateOverall(matches : Seq[Match], heroes: Seq[Hero], playerIdOfUs : Int, enemyTeam: Boolean): ZIO[Any, Throwable, String] = {
+          for {
+            potpm <- playersOfTeamPerMatch(matches, playerIdOfUs, enemyTeam)
+            heroWithWinrate : Seq[HeroStatWinrate]     <- ZIO.succeed(heroes.map{ hero =>
+              val gamesPlayedWithHero = potpm.flatMap(_.players).filter(_.hero_id == hero.id)
+              val numberOfGamesPlayedWithHero = gamesPlayedWithHero.length
+              val numberOfGamesWonWithHero = gamesPlayedWithHero.count(_.win == 1)
+              val winrate = percentage(numberOfGamesWonWithHero, numberOfGamesPlayedWithHero)
+              HeroStatWinrate(hero.localized_name, numberOfGamesWonWithHero, numberOfGamesPlayedWithHero, winrate)
+            }.filter(_.total > 0))
+            gwr <- groupAndOrderByWinrateBucket(heroWithWinrate)
+            resultsPerHero <- resultsText(gwr)
+          } yield resultsPerHero
+
+        }
+
+
+        case class MatchWithSingleTeam(win : Boolean, players: Seq[Player])
+        private def playersOfTeamPerMatch(matches : Seq[Match], playerIdInTeam : Int, enemyTeam : Boolean): Task[Seq[MatchWithSingleTeam]] = Task {
+          matches.map{ dotaMatch =>
+            val playerWon = dotaMatch.players.find(_.account_id.contains(playerIdInTeam)).map(_.win)
+            playerWon match {
+              case Some(winValueOfTeam) =>
+                // Find who is in the same team, based on the fact that everyone in the same team either wins or loses.
+                if (enemyTeam)
+                  MatchWithSingleTeam(win = winValueOfTeam == 1, dotaMatch.players.filterNot(_.win == winValueOfTeam))
+                else
+                  MatchWithSingleTeam(win = winValueOfTeam == 1, dotaMatch.players.filter(_.win == winValueOfTeam))
+              case None => throw new IllegalStateException(s"Could not find $playerIdInTeam")
+            }
+          }
+        }
       }
 
 
@@ -173,7 +219,10 @@ object MatchStatsService {
   def favoriteHeroes: ZIO[MatchStatsServiceEnv with HeroRepoEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
     ZIO.accessM(_.get.favoriteHeroes)
 
-  def heroWinrates(heroStat: HeroStat, highestToLowest : Boolean) : ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
-    ZIO.accessM(_.get.heroWinRates(heroStat, highestToLowest))
+  def heroWinratesGroupedByPlayer(heroStat: HeroStatGetter, highestToLowest : Boolean) : ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
+    ZIO.accessM(_.get.heroWinRatesGroupedByPlayer(heroStat, highestToLowest))
+
+  def heroWinRatesOverall(enemyTeam: Boolean): ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
+    ZIO.accessM(_.get.heroWinRatesOverall(enemyTeam))
 
 }

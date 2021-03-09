@@ -41,7 +41,7 @@ object DotaMatchesRepo {
         retrievedMatchDataAsString   <- ZIO.foreachPar(matchIdsToRetrieve)(dotaApiRepo.rawMatch)
         _                            <- ZIO.foreach(retrievedMatchDataAsString)(localStorageRepo.add)
         retrievedMatches             <- ZIO.foreachPar(retrievedMatchDataAsString)(decodeTo[Match])
-      } yield (decodedCachedMatches :++ retrievedMatches).take(numberOfGamesCutOff)
+      } yield (decodedCachedMatches :++ retrievedMatches).sortBy(_.start_time).reverse.take(numberOfGamesCutOff)
 
     private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
       IO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)

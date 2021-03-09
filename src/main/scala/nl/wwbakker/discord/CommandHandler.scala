@@ -21,7 +21,7 @@ object CommandHandler {
   def topBottomHeroStats(statName : String, highestToLowest : Boolean): ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, DotabotError, String] =
     HeroStats.fromStatName(statName) match {
       case Some(stat) =>
-        MatchStatsService.heroWinrates(stat, highestToLowest).mapError(TechnicalError.apply)
+        MatchStatsService.heroWinratesGroupedByPlayer(stat, highestToLowest).mapError(TechnicalError.apply)
       case None =>
         ZIO.fail(UserError(s"Possible options for best/worst: " + HeroStats.possibilities.mkString(", ")))
     }
@@ -36,17 +36,23 @@ object CommandHandler {
         topBottomHeroStats(statName, highestToLowest = true)
       case "worst" :: statName :: Nil =>
         topBottomHeroStats(statName, highestToLowest = false)
+      case "friendly" :: "team" :: Nil =>
+        MatchStatsService.heroWinRatesOverall(enemyTeam = false).mapError(TechnicalError.apply)
+      case "enemy" :: "team" :: Nil =>
+        MatchStatsService.heroWinRatesOverall(enemyTeam = true).mapError(TechnicalError.apply)
       case "latestmatches" :: Nil =>
         printLatestMatches
       case _ =>
         ZIO.fail(
           UserError(
             s"""Possible commands:
-            |$commandPrefix winloss
-            |$commandPrefix latestmatches
-            |$commandPrefix favorite hero
-            |$commandPrefix best [${HeroStats.possibilities.mkString("/")}]
-            |$commandPrefix worst [${HeroStats.possibilities.mkString("/")}]
+            |$commandPrefix **winloss**
+            |$commandPrefix **latestmatches**
+            |$commandPrefix **favorite hero**
+            |$commandPrefix **best [${HeroStats.possibilities.mkString("/")}]**
+            |$commandPrefix **worst [${HeroStats.possibilities.mkString("/")}]**
+            |$commandPrefix **friendly team** - *winrates per hero, when they are in our team (high winrate means they are a good pick)*
+            |$commandPrefix **enemy team** - *winrates per hero, when they are in their team (high winrate means they are a good ban)*
             |""".stripMargin
           )
         )
