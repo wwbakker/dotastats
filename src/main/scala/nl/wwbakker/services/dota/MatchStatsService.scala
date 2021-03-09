@@ -3,6 +3,7 @@ package nl.wwbakker.services.dota
 import nl.wwbakker.services.dota.DotaApiRepo.DotaApiRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.{DotaMatchRepoEnv, Match, Player}
 import nl.wwbakker.services.dota.HeroRepo.{Hero, HeroRepoEnv}
+import nl.wwbakker.services.dota.MatchStatsService.HeroStats.HeroStat
 import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
 import sttp.client3.asynchttpclient.zio.SttpClient
 import zio.{Has, UIO, ULayer, URIO, ZIO, ZLayer}
@@ -25,7 +26,25 @@ object MatchStatsService {
 
     def favoriteHeroes: ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
 
-    def heroWinRates(highestToLowest : Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
+    def heroWinRates(heroStat: Hero => String, highestToLowest : Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
+  }
+
+  object HeroStats {
+    type HeroStat = Hero => String
+    def name : HeroStat = _.localized_name
+    def primaryAttribute : HeroStat = _.primary_attr
+    def attackType : HeroStat = _.attack_type
+    def numberOfLegs : HeroStat = _.legs.toString
+
+    private val statsMap = Map(
+      "hero" -> name,
+      "primaryAttribute" -> primaryAttribute,
+      "attackType" -> attackType,
+      "numberOfLegs" -> numberOfLegs
+    )
+
+    def fromStatName(statName : String) : Option[HeroStat] = statsMap.get(statName)
+    val possibilities: Seq[String] = statsMap.keys.toSeq
   }
 
   val live: ULayer[MatchStatsServiceEnv] =
@@ -76,16 +95,16 @@ object MatchStatsService {
                |$results""".stripMargin
           }
 
-        def heroWinRates(highestToLowest : Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
+        override def heroWinRates(heroStat: HeroStat, highestToLowest : Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
           for {
             allGames <- DotaMatchesRepo.latestGames(wesselId)
             allHeroes <- HeroRepo.heroes
-            results <- ZIO.foreachPar(matchSubjects)(heroWinrateForPlayer(allGames, allHeroes, _, highestToLowest))
+            results <- ZIO.foreachPar(matchSubjects)(heroWinrateForPlayer(allGames, allHeroes, _, heroStat, highestToLowest))
           } yield results.mkString("\n")
 
-        private def heroWinrateForPlayer(matches : Seq[Match], heroes : Seq[Hero], playerId: Int, highToLow : Boolean) : ZIO[Any, Nothing, String] = for {
+        private def heroWinrateForPlayer(matches : Seq[Match], heroes : Seq[Hero], playerId: Int, heroStat : HeroStat, highToLow : Boolean) : ZIO[Any, Nothing, String] = for {
           playerSpecificResults         <- playerSpecificResults(matches, playerId)
-          heroesWinsLosses              <- heroesWinsLosses(playerSpecificResults, heroes)
+          heroesWinsLosses              <- heroStatWinsLosses(playerSpecificResults, heroes, heroStat)
           heroesWinsLossesGrouped       <- groupByWinrate(heroesWinsLosses)
           topOrBottom5                  <- if (highToLow) top5(heroesWinsLossesGrouped)(_._1)
                                            else bottom5(heroesWinsLossesGrouped)(_._1)
@@ -96,21 +115,22 @@ object MatchStatsService {
         private def playerSpecificResults(matches : Seq[Match], playerId : Int): UIO[Seq[Player]] =
           ZIO.succeed(matches.flatMap(_.players.find(_.account_id.contains(playerId))))
 
-        private def heroesWinsLosses(playerSpecificResults: Seq[Player], heroes : Seq[Hero]): UIO[Seq[HeroWinrate]] =
+        private def heroStatWinsLosses(playerSpecificResults: Seq[Player], heroes : Seq[Hero], heroStat : HeroStat): UIO[Seq[HeroStatWinrate]] =
           ZIO.succeed {
-            val playedHeroes = playerSpecificResults.map(_.hero_id).distinct
-            playedHeroes.map{ heroId =>
-              val numberOfTimesPlayed = playerSpecificResults.count(_.hero_id == heroId)
-              val numberOfTimesWon = playerSpecificResults.filter(_.win == 1).count(_.hero_id == heroId)
+            // for example: ("agi" -> Seq(heroId3, heroId6, heroId7))
+            val heroesGroupedPerStatValue = playerSpecificResults.map(_.hero_id).groupBy(heroId => resolveHeroStat(heroes, heroId, heroStat))
+            heroesGroupedPerStatValue.map{ case (heroStatValue, heroIdsThatMatchStat) =>
+              val numberOfTimesPlayed = playerSpecificResults.count(psr => heroIdsThatMatchStat.contains(psr.hero_id))
+              val numberOfTimesWon = playerSpecificResults.filter(_.win == 1).count(psr => heroIdsThatMatchStat.contains(psr.hero_id))
               val winrate = percentage(numberOfTimesWon, numberOfTimesPlayed)
-              HeroWinrate(resolveHeroName(heroes, heroId), numberOfTimesWon, numberOfTimesPlayed, winrate)
-            }
+              HeroStatWinrate(heroStatValue, numberOfTimesWon, numberOfTimesPlayed, winrate)
+            }.toSeq
           }
 
         private def percentage(part: Int, total : Int) : Long =
           Math.round((part.toDouble / total.toDouble) * 100d)
 
-        private def groupByWinrate(heroWinrates: Seq[HeroWinrate]): UIO[Seq[(Long, Seq[HeroWinrate])]] =
+        private def groupByWinrate(heroWinrates: Seq[HeroStatWinrate]): UIO[Seq[(Long, Seq[HeroStatWinrate])]] =
           ZIO.succeed(heroWinrates.groupBy(_.winrate).toSeq)
 
         private def top5[A, B](results: Seq[A])(f: A => B)(implicit ord: Ordering[B]): UIO[Seq[A]] =
@@ -119,13 +139,13 @@ object MatchStatsService {
         private def bottom5[A, B](results: Seq[A])(f: A => B)(implicit ord: Ordering[B]): UIO[Seq[A]]  =
           ZIO.succeed(results.sortBy(f).take(5))
 
-        private def resolveHeroName(heroes : Seq[Hero], heroId : Int) =
-          heroes.find(_.id == heroId).map(_.localized_name).getOrElse("Unknown hero")
+        private def resolveHeroStat(heroes : Seq[Hero], heroId : Int, stat : Hero => String) : String =
+          heroes.find(_.id == heroId).map(stat).getOrElse("Unknown")
 
 
-        case class HeroWinrate(heroName: String, wins : Int, total : Int, winrate: Long)
+        case class HeroStatWinrate(heroName: String, wins : Int, total : Int, winrate: Long)
 
-        private def resultsText(heroNamesWithWinrate: Seq[(Long, Seq[HeroWinrate])]): UIO[String] =
+        private def resultsText(heroNamesWithWinrate: Seq[(Long, Seq[HeroStatWinrate])]): UIO[String] =
           ZIO.succeed(
             heroNamesWithWinrate.map{case (winrate, heroesWithWinrates) =>
               s"$winrate% winrate: " + heroesWithWinrates.map(hero => s"${hero.heroName} ${hero.wins}-${hero.total - hero.wins}").mkString(", ")
@@ -144,7 +164,6 @@ object MatchStatsService {
 
     )
 
-
   val dependencies: ZLayer[Any, Throwable, HeroRepoEnv with SttpClient with DotaApiRepo with LocalStorageRepo with DotaMatchRepoEnv] =
     HeroRepo.live ++ DotaMatchesRepo.dependencies
 
@@ -154,7 +173,7 @@ object MatchStatsService {
   def favoriteHeroes: ZIO[MatchStatsServiceEnv with HeroRepoEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
     ZIO.accessM(_.get.favoriteHeroes)
 
-  def heroWinrates(highestToLowest : Boolean) : ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
-  ZIO.accessM(_.get.heroWinRates(highestToLowest))
+  def heroWinrates(heroStat: HeroStat, highestToLowest : Boolean) : ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
+    ZIO.accessM(_.get.heroWinRates(heroStat, highestToLowest))
 
 }
