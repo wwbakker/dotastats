@@ -1,8 +1,11 @@
 package nl.wwbakker.discord
 
 import ackcord.data.UserId
+import ackcord.requests.CreateMessageFile.ByteFile
 import ackcord.requests.{CreateMessage, CreateMessageData, Request}
 import ackcord.{APIMessage, CacheSnapshot, ClientSettings, DiscordClient}
+import akka.http.scaladsl.model.{ContentType, MediaType, MediaTypes}
+import akka.util.ByteString
 import nl.wwbakker.services.dota.DotaApiRepo.DotaApiRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.DotaMatchRepoEnv
 import nl.wwbakker.services.dota.HeroRepo.HeroRepoEnv
@@ -65,7 +68,8 @@ object DiscordBot extends App {
             commandPrefix = "@Wessel's Bot")
 
           zio.Runtime.default.unsafeRunSync(result.provideLayer(zioDependencies)) match {
-            case Exit.Success(text) => send(CreateMessage(message.channelId, CreateMessageData(text.take(2000))))
+            case Exit.Success(SuccessText(text)) => send(CreateMessage(message.channelId, CreateMessageData(text.take(2000))))
+            case Exit.Success(SuccessAttachment(attachment)) => send(CreateMessage(message.channelId, CreateMessageData(files = Seq(ByteFile(ContentType(MediaTypes.`image/png`),ByteString.fromArray(attachment),"plot.png")))))
             case Exit.Failure(cause) => cause.failureOption match {
               case Some(TechnicalError(e)) => println(s"Technical error. $e")
               case Some(UserError(text)) => send(CreateMessage(message.channelId, CreateMessageData(text)))

@@ -5,8 +5,12 @@ import nl.wwbakker.services.dota.DotaMatchesRepo.{DotaMatchRepoEnv, Match, Playe
 import nl.wwbakker.services.dota.HeroRepo.{Hero, HeroRepoEnv}
 import nl.wwbakker.services.dota.MatchStatsService.HeroStats.HeroStatGetter
 import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
+
 import sttp.client3.asynchttpclient.zio.SttpClient
 import zio.{Has, Task, UIO, ULayer, URIO, ZIO, ZLayer}
+
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration._
 
 object MatchStatsService {
   private val wesselId = 21842016
@@ -23,6 +27,8 @@ object MatchStatsService {
 
   trait Service {
     def winLoss: ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, String]
+
+    def winLossPlot: ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]]
 
     def favoriteHeroes: ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
 
@@ -58,14 +64,6 @@ object MatchStatsService {
             results <- ZIO.foreachPar(matchSubjects)(calculateWinLoss(allGames, _))
           } yield results.mkString("\n")
 
-
-        override def favoriteHeroes: ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
-          for {
-            allGames <- DotaMatchesRepo.latestGames(wesselId)
-            allHeroes <- HeroRepo.heroes
-            results <- ZIO.foreachPar(matchSubjects)(calculateFavoriteHeroes(allGames,allHeroes,_))
-          } yield results.mkString("\n")
-
         private def calculateWinLoss(matches: Seq[Match], playerId: Int): UIO[String] =
           ZIO.succeed {
             val playerSpecificResults: Seq[DotaMatchesRepo.Player] =
@@ -77,6 +75,49 @@ object MatchStatsService {
             val playerName = playerSpecificResults.headOption.flatMap(_.personaname).getOrElse("Unknown")
             s"**$playerName**: $wins wins, $losses losses - $winrate% winrate"
           }
+
+
+        private def plotWinLoss(matches: Seq[Match]): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
+          zio.Task {
+            import de.sciss.chart.api._
+            val dataSets = matchSubjects.map(plotTestPs(matches, _))
+            val chart = XYLineChart(dataSets)
+            chart.plot.getDomainAxis.setLabel("Days ago")
+            chart.plot.getDomainAxis.setInverted(true)
+            chart.plot.getRangeAxis.setLabel("Win surplus")
+            chart.title = "Surplus wins per player"
+
+            chart.encodeAsPNG()
+          }
+
+        override def winLossPlot: ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] = for {
+          allGames <- DotaMatchesRepo.latestGames(wesselId)
+          pngPlot  <- plotWinLoss(allGames)
+        } yield pngPlot
+
+        private def plotTestPs(matches: Seq[Match], playerId: Int): (String, List[(Float, Int)]) = {
+          val playerSpecificResults: Seq[DotaMatchesRepo.Player] =
+            matches.flatMap(_.players.find(_.account_id.contains(playerId))).sortBy(_.start_time)
+          val playerName = playerSpecificResults.headOption.flatMap(_.personaname).getOrElse("Unknown")
+          val now = System.currentTimeMillis / 1000L // unix time format
+
+          val (playerSpecificDataSet, _): (List[(Float, Int)], Int) = playerSpecificResults.foldLeft((List.empty[(Float, Int)], 0)){
+            case ((previousPoints, score), playerMatch) =>
+              val newScore = score + playerMatch.win - playerMatch.lose
+              val time = (now - playerMatch.start_time).toFloat / (60f * 60f * 24f) // convert seconds to days
+              ((time, newScore) :: previousPoints, newScore)
+          }
+
+          (playerName, playerSpecificDataSet)
+        }
+
+
+        override def favoriteHeroes: ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
+          for {
+            allGames <- DotaMatchesRepo.latestGames(wesselId)
+            allHeroes <- HeroRepo.heroes
+            results <- ZIO.foreachPar(matchSubjects)(calculateFavoriteHeroes(allGames,allHeroes,_))
+          } yield results.mkString("\n")
 
         private def calculateFavoriteHeroes(matches: Seq[Match], heroes: Seq[Hero], playerId: Int): UIO[String] =
           ZIO.succeed {
@@ -215,6 +256,9 @@ object MatchStatsService {
 
   def winLoss: ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient, Throwable, String] =
     ZIO.accessM(_.get.winLoss)
+
+  def winLossPlot: ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
+    ZIO.accessM(_.get.winLossPlot)
 
   def favoriteHeroes: ZIO[MatchStatsServiceEnv with HeroRepoEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
     ZIO.accessM(_.get.favoriteHeroes)

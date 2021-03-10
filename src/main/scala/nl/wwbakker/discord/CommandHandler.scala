@@ -26,27 +26,30 @@ object CommandHandler {
         ZIO.fail(UserError(s"Possible options for best/worst: " + HeroStats.possibilities.mkString(", ")))
     }
 
-  def handleCommand(args: Seq[String], commandPrefix: String = ""): ZIO[MatchStatsServiceEnv with HeroRepoEnv with DotaMatchRepoEnv with SttpClient, DotabotError, String] = {
+  def handleCommand(args: Seq[String], commandPrefix: String = ""): ZIO[MatchStatsServiceEnv with HeroRepoEnv with DotaMatchRepoEnv with SttpClient, DotabotError, DotabotSuccess] = {
     args.toList match {
       case "winloss" :: Nil =>
-        MatchStatsService.winLoss.mapError(TechnicalError.apply)
+        MatchStatsService.winLoss.mapError(TechnicalError.apply).map(SuccessText)
+      case "winlossplot" :: Nil =>
+        MatchStatsService.winLossPlot.mapError(TechnicalError.apply).map(SuccessAttachment)
       case "favorite" :: "hero" :: Nil =>
-        MatchStatsService.favoriteHeroes.mapError(TechnicalError.apply)
+        MatchStatsService.favoriteHeroes.mapError(TechnicalError.apply).map(SuccessText)
       case "best" :: statName :: Nil =>
-        topBottomHeroStats(statName, highestToLowest = true)
+        topBottomHeroStats(statName, highestToLowest = true).map(SuccessText)
       case "worst" :: statName :: Nil =>
-        topBottomHeroStats(statName, highestToLowest = false)
+        topBottomHeroStats(statName, highestToLowest = false).map(SuccessText)
       case "friendly" :: "team" :: Nil =>
-        MatchStatsService.heroWinRatesOverall(enemyTeam = false).mapError(TechnicalError.apply)
+        MatchStatsService.heroWinRatesOverall(enemyTeam = false).mapError(TechnicalError.apply).map(SuccessText)
       case "enemy" :: "team" :: Nil =>
-        MatchStatsService.heroWinRatesOverall(enemyTeam = true).mapError(TechnicalError.apply)
+        MatchStatsService.heroWinRatesOverall(enemyTeam = true).mapError(TechnicalError.apply).map(SuccessText)
       case "latestmatches" :: Nil =>
-        printLatestMatches
+        printLatestMatches.map(SuccessText)
       case _ =>
         ZIO.fail(
           UserError(
             s"""Possible commands:
             |$commandPrefix **winloss**
+            |$commandPrefix **winlossplot**
             |$commandPrefix **latestmatches**
             |$commandPrefix **favorite hero**
             |$commandPrefix **best [${HeroStats.possibilities.mkString("/")}]**

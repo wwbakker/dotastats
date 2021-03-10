@@ -17,6 +17,8 @@ libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.2.3" // akka lo
 
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.7.1"
 
+libraryDependencies += "de.sciss" %% "scala-chart" % "0.8.0"
+
 val circeVersion = "0.12.3"
 
 libraryDependencies ++= Seq(

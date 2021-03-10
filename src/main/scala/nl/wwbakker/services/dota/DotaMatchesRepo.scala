@@ -4,6 +4,7 @@ package nl.wwbakker.services.dota
 import io.circe.Decoder
 import io.circe.generic.auto._
 import io.circe.parser.decode
+import nl.wwbakker.misc.Utils.localDateTimeFromUnixTimestamp
 import nl.wwbakker.services.dota.DotaApiRepo.{DotaApiRepo, RecentMatch}
 import nl.wwbakker.services.generic.LocalStorageRepo
 import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
@@ -16,12 +17,12 @@ import java.util.TimeZone
 object DotaMatchesRepo {
   private val numberOfGamesCutOff = 100
 
-  case class Player(account_id: Option[Int], personaname: Option[String], hero_id: Int, win: Int, lose: Int)
+  case class Player(account_id: Option[Int], personaname: Option[String], hero_id: Int, win: Int, lose: Int, start_time: Int)
 
   case class Match(match_id: Long, start_time: Int, duration: Int, players: Seq[Player]) {
     def startTimeText: String =
-      LocalDateTime.ofInstant(Instant.ofEpochMilli(start_time * 1000L),
-        TimeZone.getDefault.toZoneId).toString
+      localDateTimeFromUnixTimestamp(start_time).toString
+
     def durationText: String =
       s"${duration / 60}:${String.format("%02d", duration % 60)}"
 
