@@ -69,7 +69,7 @@ object DiscordBot extends App {
 
           zio.Runtime.default.unsafeRunSync(result.provideLayer(zioDependencies)) match {
             case Exit.Success(SuccessText(text)) => send(CreateMessage(message.channelId, CreateMessageData(text.take(2000))))
-            case Exit.Success(SuccessAttachment(attachment)) => send(CreateMessage(message.channelId, CreateMessageData(files = Seq(ByteFile(ContentType(MediaTypes.`image/png`),ByteString.fromArray(attachment),"plot.png")))))
+            case Exit.Success(SuccessPicture(attachment)) => send(CreateMessage(message.channelId, CreateMessageData(files = Seq(ByteFile(ContentType(MediaTypes.`image/png`),ByteString.fromArray(attachment),"plot.png")))))
             case Exit.Failure(cause) => cause.failureOption match {
               case Some(TechnicalError(e)) => println(s"Technical error. $e")
               case Some(UserError(text)) => send(CreateMessage(message.channelId, CreateMessageData(text)))

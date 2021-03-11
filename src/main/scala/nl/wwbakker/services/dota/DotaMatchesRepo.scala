@@ -11,13 +11,10 @@ import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
 import sttp.client3.asynchttpclient.zio.SttpClient
 import zio.{Has, IO, UIO, ZIO, ZLayer}
 
-import java.time.{Instant, LocalDateTime}
-import java.util.TimeZone
-
 object DotaMatchesRepo {
   private val numberOfGamesCutOff = 100
 
-  case class Player(account_id: Option[Int], personaname: Option[String], hero_id: Int, win: Int, lose: Int, start_time: Int)
+  case class Player(account_id: Option[Int], personaname: Option[String], hero_id: Int, win: Int, lose: Int, start_time: Int, kills: Int, deaths: Int, assists: Int, total_gold:Int, total_xp: Int, last_hits: Int, denies: Int, duration: Int)
 
   case class Match(match_id: Long, start_time: Int, duration: Int, players: Seq[Player]) {
     def startTimeText: String =

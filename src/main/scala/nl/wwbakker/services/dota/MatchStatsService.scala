@@ -35,16 +35,19 @@ object MatchStatsService {
     def heroWinRatesGroupedByPlayer(heroStat: Hero => String, highestToLowest : Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
 
     def heroWinRatesOverall(enemyTeam: Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
+
+    def matchStatPlot(stat : PlayerStats.PlayerStatInfo): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]]
   }
 
   object HeroStats {
     type HeroStatGetter = Hero => String
+
     def name : HeroStatGetter = _.localized_name
     def primaryAttribute : HeroStatGetter = _.primary_attr
     def attackType : HeroStatGetter = _.attack_type
     def numberOfLegs : HeroStatGetter = _.legs.toString
 
-    private val statsMap = Map(
+    private val statsMap = Map[String, HeroStatGetter](
       "hero" -> name,
       "primaryAttribute" -> primaryAttribute,
       "attackType" -> attackType,
@@ -54,6 +57,26 @@ object MatchStatsService {
     def fromStatName(statName : String) : Option[HeroStatGetter] = statsMap.get(statName)
     val possibilities: Seq[String] = statsMap.keys.toSeq
   }
+
+  object PlayerStats {
+    type PlayerStatGetter = Player => Float
+    case class PlayerStatInfo(statGetter: PlayerStatGetter, friendlyName : String)
+
+    private val statsMap = Map[String, PlayerStatInfo](
+      "kills" -> PlayerStatInfo(_.kills, "kills"),
+      "deaths" -> PlayerStatInfo(_.deaths, "deaths"),
+      "assists" -> PlayerStatInfo(_.assists, "assists"),
+      "lastHits" -> PlayerStatInfo(_.last_hits, "last hits"),
+      "denies" -> PlayerStatInfo(_.denies, "denies"),
+      "gpm" -> PlayerStatInfo(p => p.total_gold.toFloat / (p.duration / 60f), "gold per minute"),
+      "xpm" -> PlayerStatInfo(p => p.total_xp.toFloat / (p.duration / 60f), "experience per minute"),
+      "duration" -> PlayerStatInfo(_.duration / 60f, "duration in minutes"),
+    )
+
+    def fromStatName(statName : String) : Option[PlayerStatInfo] = statsMap.get(statName)
+    val possibilities: Seq[String] = statsMap.keys.toSeq
+  }
+
 
   val live: ULayer[MatchStatsServiceEnv] =
     ZLayer.succeed(
@@ -77,10 +100,10 @@ object MatchStatsService {
           }
 
 
-        private def plotWinLoss(matches: Seq[Match]): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
+        private def winLossPlot(matches: Seq[Match]): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
           zio.Task {
             import de.sciss.chart.api._
-            val dataSets = matchSubjects.map(plotTestPs(matches, _))
+            val dataSets = matchSubjects.map(winsLossesPlottedOfPlayerInTime(matches, _))
             val chart = XYLineChart(dataSets)
             chart.plot.getDomainAxis.setLabel("Days ago")
             chart.plot.getDomainAxis.setInverted(true)
@@ -92,10 +115,12 @@ object MatchStatsService {
 
         override def winLossPlot: ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] = for {
           allGames <- DotaMatchesRepo.latestGames(wesselId)
-          pngPlot  <- plotWinLoss(allGames)
+          pngPlot  <- winLossPlot(allGames)
         } yield pngPlot
 
-        private def plotTestPs(matches: Seq[Match], playerId: Int): (String, List[(Float, Int)]) = {
+
+
+        private def winsLossesPlottedOfPlayerInTime(matches: Seq[Match], playerId: Int): (String, List[(Float, Int)]) = {
           val playerSpecificResults: Seq[DotaMatchesRepo.Player] =
             matches.flatMap(_.players.find(_.account_id.contains(playerId))).sortBy(_.start_time)
           val playerName = playerSpecificResults.headOption.flatMap(_.personaname).getOrElse("Unknown")
@@ -106,6 +131,43 @@ object MatchStatsService {
               val newScore = score + playerMatch.win - playerMatch.lose
               val time = (now - playerMatch.start_time).toFloat / (60f * 60f * 24f) // convert seconds to days
               ((time, newScore) :: previousPoints, newScore)
+          }
+
+          (playerName, playerSpecificDataSet)
+        }
+
+
+        override def matchStatPlot(stat : PlayerStats.PlayerStatInfo): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] = for {
+          allGames <- DotaMatchesRepo.latestGames(wesselId)
+          pngPlot  <- matchStatPlot(allGames, stat)
+        } yield pngPlot
+
+        private def matchStatPlot(matches: Seq[Match], stat: PlayerStats.PlayerStatInfo): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
+          zio.Task {
+            import de.sciss.chart.api._
+            val dataSets = matchSubjects.map(playerStatPlotOfPlayerInTime(matches, _, stat))
+
+//            val ds: Seq[(String, Seq[Float])] = dataSets.map{case (name, seq) => (name, seq.map(_._2))}
+
+            val chart = XYLineChart(dataSets)
+            chart.plot.getDomainAxis.setLabel("Days ago")
+            chart.plot.getDomainAxis.setInverted(true)
+            chart.plot.getRangeAxis.setLabel(stat.friendlyName)
+            chart.title = s"${stat.friendlyName.capitalize} per player"
+
+            chart.encodeAsPNG()
+          }
+
+        private def playerStatPlotOfPlayerInTime(matches: Seq[Match], playerId: Int, stat: PlayerStats.PlayerStatInfo): (String, List[(Float, Float)]) = {
+          val playerSpecificResults: Seq[DotaMatchesRepo.Player] =
+            matches.flatMap(_.players.find(_.account_id.contains(playerId))).sortBy(_.start_time)
+          val playerName = playerSpecificResults.headOption.flatMap(_.personaname).getOrElse("Unknown")
+          val now = System.currentTimeMillis / 1000L // unix time format
+
+          val playerSpecificDataSet: List[(Float, Float)] = playerSpecificResults.foldLeft(List.empty[(Float, Float)]){
+            case (previousPoints, playerMatch) =>
+              val time = (now - playerMatch.start_time).toFloat / (60f * 60f * 24f) // convert seconds to days
+              (time, stat.statGetter(playerMatch)) :: previousPoints
           }
 
           (playerName, playerSpecificDataSet)
@@ -248,7 +310,6 @@ object MatchStatsService {
         }
       }
 
-
     )
 
   val dependencies: ZLayer[Any, Throwable, HeroRepoEnv with SttpClient with DotaApiRepo with LocalStorageRepo with DotaMatchRepoEnv] =
@@ -268,5 +329,8 @@ object MatchStatsService {
 
   def heroWinRatesOverall(enemyTeam: Boolean): ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
     ZIO.accessM(_.get.heroWinRatesOverall(enemyTeam))
+
+  def matchStatPlot(stat : PlayerStats.PlayerStatInfo): ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
+    ZIO.accessM(_.get.matchStatPlot(stat))
 
 }
