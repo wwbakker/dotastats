@@ -6,6 +6,7 @@ import io.circe.generic.auto._
 import io.circe.parser.decode
 import nl.wwbakker.misc.Utils.localDateTimeFromUnixTimestamp
 import nl.wwbakker.services.dota.DotaApiRepo.{DotaApiRepo, RecentMatch}
+import nl.wwbakker.services.dota.MatchStatsService.wesselId
 import nl.wwbakker.services.generic.LocalStorageRepo
 import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
 import sttp.client3.asynchttpclient.zio.SttpClient
@@ -24,6 +25,8 @@ object DotaMatchesRepo {
       s"${duration / 60}:${String.format("%02d", duration % 60)}"
 
     def text = s"Match: $match_id, started $startTimeText, took $durationText"
+
+    def wesselWon: Boolean = players.find(_.account_id.contains(wesselId)).exists(_.win == 1)
   }
 
   type DotaMatchRepoEnv = Has[DotaMatchesRepo.Service]

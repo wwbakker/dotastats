@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 
 object MatchStatsService {
-  private val wesselId = 21842016
+  val wesselId = 21842016
   private val nikolaId = 39067906
   private val chairmanId = 55277122
   private val beamcannon = 56624400
@@ -37,6 +37,8 @@ object MatchStatsService {
     def heroWinRatesOverall(enemyTeam: Boolean): ZIO[Any with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String]
 
     def matchStatPlot(stat : PlayerStats.PlayerStatInfo): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]]
+
+    def latestMatchesOverview: ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, String]
   }
 
   object HeroStats {
@@ -308,6 +310,21 @@ object MatchStatsService {
             }
           }
         }
+
+        override def latestMatchesOverview: ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, String] =
+          for {
+            allGames <- DotaMatchesRepo.latestGames(wesselId)
+            matchesText <- matchesText(allGames)
+          } yield matchesText
+
+        def matchesText(matches : Seq[Match]): UIO[String] = {
+          ZIO.succeed(
+            matches
+              .map(m => s"${m.startTimeText}, ${m.durationText} - **${if (m.wesselWon) "WON" else "LOST"}**" )
+              .take(5)
+              .mkString("\n")
+          )
+        }
       }
 
     )
@@ -332,5 +349,8 @@ object MatchStatsService {
 
   def matchStatPlot(stat : PlayerStats.PlayerStatInfo): ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
     ZIO.accessM(_.get.matchStatPlot(stat))
+
+  def latestMatchesOverview: ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient, Throwable, String] =
+    ZIO.accessM(_.get.latestMatchesOverview)
 
 }

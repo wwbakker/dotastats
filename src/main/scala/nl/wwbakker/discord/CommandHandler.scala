@@ -13,11 +13,6 @@ object CommandHandler {
 
   val numberOfDaysInThePast = 14
 
-  def printLatestMatches: ZIO[Any with DotaMatchRepoEnv with SttpClient, TechnicalError, String] = (for {
-    matches <- DotaMatchesRepo.latestGames(wesselId)
-  } yield matches.map(_.text).mkString("\n")
-  ).mapError(TechnicalError.apply)
-
   def topBottomHeroStats(statName : String, highestToLowest : Boolean): ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, DotabotError, String] =
     HeroStats.fromStatName(statName) match {
       case Some(stat) =>
@@ -53,7 +48,7 @@ object CommandHandler {
       case "plot" :: statName :: Nil =>
         matchStatsPlot(statName).map(SuccessPicture)
       case "latestmatches" :: Nil =>
-        printLatestMatches.map(SuccessText)
+        MatchStatsService.latestMatchesOverview.mapError(TechnicalError.apply).map(SuccessText)
       case _ =>
         ZIO.fail(
           UserError(
