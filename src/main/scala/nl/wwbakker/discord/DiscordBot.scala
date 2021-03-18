@@ -9,8 +9,9 @@ import akka.util.ByteString
 import nl.wwbakker.services.dota.DotaApiRepo.DotaApiRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.DotaMatchRepoEnv
 import nl.wwbakker.services.dota.HeroRepo.HeroRepoEnv
-import nl.wwbakker.services.dota.MatchStatsService.MatchStatsServiceEnv
-import nl.wwbakker.services.dota.{DotaApiRepo, DotaMatchesRepo, MatchStatsService}
+import nl.wwbakker.services.dota.statistics.MatchStatsService
+import nl.wwbakker.services.dota.statistics.MatchStatsService.MatchStatsServiceEnv
+import nl.wwbakker.services.dota.{DotaApiRepo, DotaMatchesRepo}
 import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
 import os.Path
 import sttp.client3.asynchttpclient.zio.SttpClient
