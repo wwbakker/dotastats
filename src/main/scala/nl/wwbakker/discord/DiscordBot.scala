@@ -22,8 +22,9 @@ import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
 object DiscordBot extends App {
-  val tokenPath: Path = os.home / ".dialogue" / "discord_token"
-  val token: String = os.read(tokenPath)
+  // To generate the token, look in the developer portal under application > settings > bot > Build-A-Bot
+  val tokenPath: Path = os.home / ".dotabot" / "discord_token"
+  val token: String = os.read(tokenPath).strip()
   val clientId: UserId = UserId(token.split('.').headOption.map(Base64.getDecoder.decode).map(new String(_)).get)
   val clientSettings: ClientSettings = ClientSettings(token)
   val zioDependencies: ZLayer[Any, TechnicalError, SttpClient with DotaApiRepo with LocalStorageRepo with DotaMatchRepoEnv with HeroRepoEnv with MatchStatsServiceEnv] =
@@ -55,12 +56,12 @@ object DiscordBot extends App {
       content.replaceAll("<@![0-9]+> ", "")
 
     lazy val registration = client.onEventSideEffects { implicit c => {
-      case APIMessage.MessageCreate(_, message, _) if message.content.contains("stop bot") =>
+      case APIMessage.MessageCreate(_, message, _, _) if message.content.contains("stop bot") =>
         println("stopping")
         stop()
         client.logout()
         client.shutdownAckCord()
-      case APIMessage.MessageCreate(_, message, _) =>
+      case APIMessage.MessageCreate(_, message, _, _) =>
         println(s"message: ${message.content} - ${message.mentions.mkString(", ")}")
         if (message.mentions.contains(clientId)) {
           val result = CommandHandler.handleCommand(
