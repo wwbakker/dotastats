@@ -1,10 +1,10 @@
 package nl.wwbakker.services.dota.statistics.implementations
 
 import nl.wwbakker.misc.Utils.percentage
+import nl.wwbakker.services.dota.Clients.SttpClient
 import nl.wwbakker.services.dota.DotaMatchesRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.{DotaMatchRepoEnv, Match}
 import nl.wwbakker.services.dota.statistics.model.Players
-import sttp.client3.asynchttpclient.zio.SttpClient
 import zio.{UIO, ZIO}
 
 trait WinLossImpl {

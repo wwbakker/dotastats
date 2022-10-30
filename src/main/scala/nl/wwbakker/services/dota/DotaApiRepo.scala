@@ -3,10 +3,10 @@ package nl.wwbakker.services.dota
 import io.circe.Decoder
 import io.circe.generic.auto._
 import io.circe.parser.decode
-import sttp.client3.asynchttpclient.zio.{AsyncHttpClientZioBackend, SttpClient, send}
+import nl.wwbakker.services.dota.Clients.SttpClient
 import sttp.client3.{Response, UriContext, basicRequest}
 import sttp.model.Uri
-import zio.{Has, IO, ZIO, ZLayer}
+import zio.{IO, ZIO, ZLayer}
 
 object DotaApiRepo {
 
@@ -30,7 +30,7 @@ object DotaApiRepo {
                          leaver_status: Int, party_size: Option[Int])
 
   // Service description
-  type DotaApiRepo = Has[DotaApiRepo.Service]
+  type DotaApiRepo = DotaApiRepo.Service
 
   trait Service {
     def winLoss(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[SttpClient, Throwable, WinLoss]
@@ -60,13 +60,15 @@ object DotaApiRepo {
   )
 
   val dependencies: ZLayer[Any, Throwable, SttpClient with DotaApiRepo] =
-    AsyncHttpClientZioBackend.layer() >+> DotaApiRepo.live
+    Clients.live >+> DotaApiRepo.live
 
   private def callService(uri : Uri): ZIO[SttpClient, Throwable, String] =
-    for {
-      response <- send(basicRequest.get(uri))
-      response200 <- filter200Response(response)
-    } yield response200
+    ZIO.environmentWithZIO(r =>
+        for {
+          response <- r.get.send(basicRequest.get(uri))
+          response200 <- filter200Response(response)
+        } yield response200
+    )
 
   private def callServiceAndDecode[A: Decoder](uri: Uri): ZIO[SttpClient, Throwable, A] =
     for {
@@ -79,20 +81,20 @@ object DotaApiRepo {
       new IllegalStateException(s"Received error from service:\n $e")).swap)
 
   private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
-    IO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
+    ZIO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
 
 
   // API
   def winLoss(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[DotaApiRepo with SttpClient, Throwable, WinLoss] =
-    ZIO.accessM(_.get.winLoss(playerId, numberOfDaysInThePast))
+    ZIO.environmentWithZIO(_.get.winLoss(playerId, numberOfDaysInThePast))
 
   def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[DotaApiRepo with SttpClient, Throwable, Seq[Peer]] =
-    ZIO.accessM(_.get.peers(playerId, numberOfDaysInThePast))
+    ZIO.environmentWithZIO(_.get.peers(playerId, numberOfDaysInThePast))
 
   def recentMatches(playerId: Int): ZIO[DotaApiRepo with SttpClient, Throwable, Seq[RecentMatch]] =
-    ZIO.accessM(_.get.recentMatches(playerId))
+    ZIO.environmentWithZIO(_.get.recentMatches(playerId))
 
   def rawMatch(matchId : Int) : ZIO[DotaApiRepo with SttpClient, Throwable, String] =
-    ZIO.accessM(_.get.rawMatch(matchId))
+    ZIO.environmentWithZIO(_.get.rawMatch(matchId))
 
 }

@@ -1,7 +1,7 @@
 package nl.wwbakker.services.generic
 
 import os.Path
-import zio.{Has, Task, ZIO, ZLayer}
+import zio.{Task, ZIO, ZLayer}
 
 import java.nio.charset.Charset
 import java.util.Base64
@@ -11,7 +11,7 @@ object LocalStorageRepo {
   private val utf8: Charset = Charset.forName("UTF-8")
 
   //  Service description
-  type LocalStorageRepo = Has[LocalStorageRepo.Service]
+  type LocalStorageRepo = LocalStorageRepo.Service
 
   trait Service {
     def add(item: String): Task[Unit]
@@ -22,14 +22,14 @@ object LocalStorageRepo {
   // Implementation
   val live: zio.Layer[Throwable, LocalStorageRepo] = ZLayer.succeed(
     new Service {
-      override def add(item: String): Task[Unit] = Task {
+      override def add(item: String): Task[Unit] = ZIO.attempt {
         os.write.append(
           matchesFilePath,
           data = (Base64.getEncoder.encodeToString(item.getBytes(utf8)) + "\n").getBytes(utf8),
           createFolders = true)
       }
 
-      override def list(): Task[Seq[String]] = Task {
+      override def list(): Task[Seq[String]] = ZIO.attempt {
         if (!os.exists(matchesFilePath))
           Nil
         else
@@ -43,9 +43,9 @@ object LocalStorageRepo {
   )
 
   def add(item: String): ZIO[LocalStorageRepo, Throwable, Unit] =
-    ZIO.accessM(_.get.add(item))
+    ZIO.environmentWithZIO(_.get.add(item))
 
   def list(): ZIO[LocalStorageRepo, Throwable, Seq[String]] =
-    ZIO.accessM(_.get.list())
+    ZIO.environmentWithZIO(_.get.list())
 
 }

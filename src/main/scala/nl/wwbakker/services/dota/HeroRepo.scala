@@ -1,6 +1,6 @@
 package nl.wwbakker.services.dota
 
-import zio.{Has, IO, Task, ULayer, ZIO, ZLayer}
+import zio.{IO, Task, ULayer, ZIO, ZLayer}
 
 import scala.io.Source
 import io.circe.Decoder
@@ -12,7 +12,7 @@ object HeroRepo {
   case class Hero(id: Int, name: String, localized_name: String, primary_attr: String, attack_type: String,
                   roles: Seq[String], legs: Int)
 
-  type HeroRepoEnv = Has[HeroRepo.Service]
+  type HeroRepoEnv = HeroRepo.Service
 
   trait Service {
     def hero(id: Int): IO[Throwable, Hero]
@@ -24,7 +24,7 @@ object HeroRepo {
       new Service {
         override def heroes: IO[Throwable, Seq[Hero]] =
           for {
-            heroesJsonText <- Task {
+            heroesJsonText <- ZIO.attempt {
               Source.fromResource("heroes.json").mkString
             }
             heroes <- decodeTo[Seq[Hero]](heroesJsonText)
@@ -39,7 +39,7 @@ object HeroRepo {
 
 
         private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
-          IO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
+          ZIO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
 
         private def findHero(id : Int, heroes: Seq[Hero]) =
           heroes.find(_.id == id) match {
@@ -52,9 +52,9 @@ object HeroRepo {
 
   // front-facing API
   def hero(id: Int): ZIO[HeroRepoEnv, Throwable, Hero] =
-    ZIO.accessM(_.get.hero(id))
+    ZIO.environmentWithZIO(_.get.hero(id))
 
   def heroes: ZIO[HeroRepoEnv, Throwable, Seq[Hero]] =
-    ZIO.accessM(_.get.heroes)
+    ZIO.environmentWithZIO(_.get.heroes)
 
 }

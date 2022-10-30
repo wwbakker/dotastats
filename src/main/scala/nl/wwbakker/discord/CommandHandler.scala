@@ -1,11 +1,11 @@
 package nl.wwbakker.discord
 
+import nl.wwbakker.services.dota.Clients.SttpClient
 import nl.wwbakker.services.dota.DotaMatchesRepo.DotaMatchRepoEnv
 import nl.wwbakker.services.dota.HeroRepo.HeroRepoEnv
 import nl.wwbakker.services.dota.statistics.MatchStatsService.MatchStatsServiceEnv
 import nl.wwbakker.services.dota.statistics.MatchStatsService
 import nl.wwbakker.services.dota.statistics.model.{HeroStats, PlayerStats}
-import sttp.client3.asynchttpclient.zio.SttpClient
 import zio.ZIO
 
 object CommandHandler {

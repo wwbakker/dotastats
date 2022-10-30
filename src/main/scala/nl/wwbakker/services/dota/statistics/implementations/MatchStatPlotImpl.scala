@@ -1,9 +1,9 @@
 package nl.wwbakker.services.dota.statistics.implementations
 
+import nl.wwbakker.services.dota.Clients.SttpClient
 import nl.wwbakker.services.dota.DotaMatchesRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.{DotaMatchRepoEnv, Match}
 import nl.wwbakker.services.dota.statistics.model.{PlayerStats, Players}
-import sttp.client3.asynchttpclient.zio.SttpClient
 import zio.ZIO
 
 trait MatchStatPlotImpl {
@@ -14,7 +14,7 @@ trait MatchStatPlotImpl {
   } yield pngPlot
 
   private def matchStatPlot(matches: Seq[Match], stat: PlayerStats.PlayerStatInfo): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
-    zio.Task {
+    ZIO.attempt {
       import de.sciss.chart.api._
       val dataSets = Players.everyone.map(playerStatPlotOfPlayerInTime(matches, _, stat))
 

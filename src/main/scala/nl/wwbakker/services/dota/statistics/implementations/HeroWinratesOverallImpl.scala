@@ -1,12 +1,12 @@
 package nl.wwbakker.services.dota.statistics.implementations
 
 import nl.wwbakker.misc.Utils.percentage
+import nl.wwbakker.services.dota.Clients.SttpClient
 import nl.wwbakker.services.dota.DotaMatchesRepo.{DotaMatchRepoEnv, Match, Player}
 import nl.wwbakker.services.dota.{DotaMatchesRepo, HeroRepo}
 import nl.wwbakker.services.dota.HeroRepo.{Hero, HeroRepoEnv}
 import nl.wwbakker.services.dota.statistics.model.HeroStats.HeroStatWinrate
 import nl.wwbakker.services.dota.statistics.model.Players
-import sttp.client3.asynchttpclient.zio.SttpClient
 import zio.{Task, UIO, ZIO}
 
 trait HeroWinratesOverallImpl extends HeroWinratesResultsTextImpl {
@@ -20,13 +20,13 @@ trait HeroWinratesOverallImpl extends HeroWinratesResultsTextImpl {
   private def heroWinrateOverall(matches: Seq[Match], heroes: Seq[Hero], playerIdOfUs: Int, enemyTeam: Boolean): ZIO[Any, Throwable, String] = {
     for {
       potpm <- playersOfTeamPerMatch(matches, playerIdOfUs, enemyTeam)
-      heroWithWinrate: Seq[HeroStatWinrate] <- ZIO.succeed(heroes.map { hero =>
+      heroWithWinrate: Seq[HeroStatWinrate] = heroes.map { hero =>
         val gamesPlayedWithHero = potpm.flatMap(_.players).filter(_.hero_id == hero.id)
         val numberOfGamesPlayedWithHero = gamesPlayedWithHero.length
         val numberOfGamesWonWithHero = gamesPlayedWithHero.count(_.win == 1)
         val winrate = percentage(numberOfGamesWonWithHero, numberOfGamesPlayedWithHero)
         HeroStatWinrate(hero.localized_name, numberOfGamesWonWithHero, numberOfGamesPlayedWithHero, winrate)
-      }.filter(_.total > 0))
+      }.filter(_.total > 0)
       gwr <- groupAndOrderByWinrateBucket(heroWithWinrate)
       resultsPerHero <- resultsText(gwr)
     } yield resultsPerHero
@@ -38,7 +38,7 @@ trait HeroWinratesOverallImpl extends HeroWinratesResultsTextImpl {
 
   private case class MatchWithSingleTeam(win: Boolean, players: Seq[Player])
 
-  private def playersOfTeamPerMatch(matches: Seq[Match], playerIdInTeam: Int, enemyTeam: Boolean): Task[Seq[MatchWithSingleTeam]] = Task {
+  private def playersOfTeamPerMatch(matches: Seq[Match], playerIdInTeam: Int, enemyTeam: Boolean): Task[Seq[MatchWithSingleTeam]] = ZIO.attempt {
     matches.map { dotaMatch =>
       val playerWon = dotaMatch.players.find(_.account_id.contains(playerIdInTeam)).map(_.win)
       playerWon match {

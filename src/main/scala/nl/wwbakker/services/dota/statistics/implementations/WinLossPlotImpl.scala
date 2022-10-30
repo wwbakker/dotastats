@@ -1,9 +1,9 @@
 package nl.wwbakker.services.dota.statistics.implementations
 
+import nl.wwbakker.services.dota.Clients.SttpClient
 import nl.wwbakker.services.dota.DotaMatchesRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.{DotaMatchRepoEnv, Match}
 import nl.wwbakker.services.dota.statistics.model.Players
-import sttp.client3.asynchttpclient.zio.SttpClient
 import zio.ZIO
 
 trait WinLossPlotImpl {
@@ -13,7 +13,7 @@ trait WinLossPlotImpl {
   } yield pngPlot
 
   private def winLossPlot(matches: Seq[Match]): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
-    zio.Task {
+    ZIO.attempt {
       import de.sciss.chart.api._
       val dataSets = Players.everyone.map(winsLossesPlottedOfPlayerInTime(matches, _))
       val chart = XYLineChart(dataSets)

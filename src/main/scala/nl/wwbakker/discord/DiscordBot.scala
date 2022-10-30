@@ -4,8 +4,9 @@ import ackcord.data.UserId
 import ackcord.requests.CreateMessageFile.ByteFile
 import ackcord.requests.{CreateMessage, CreateMessageData, Request}
 import ackcord.{APIMessage, CacheSnapshot, ClientSettings, DiscordClient}
-import akka.http.scaladsl.model.{ContentType, MediaType, MediaTypes}
+import akka.http.scaladsl.model.{ContentType, MediaTypes}
 import akka.util.ByteString
+import nl.wwbakker.services.dota.Clients.SttpClient
 import nl.wwbakker.services.dota.DotaApiRepo.DotaApiRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.DotaMatchRepoEnv
 import nl.wwbakker.services.dota.HeroRepo.HeroRepoEnv
@@ -14,8 +15,7 @@ import nl.wwbakker.services.dota.statistics.MatchStatsService.MatchStatsServiceE
 import nl.wwbakker.services.dota.{DotaApiRepo, DotaMatchesRepo}
 import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
 import os.Path
-import sttp.client3.asynchttpclient.zio.SttpClient
-import zio.{Exit, ZLayer}
+import zio.{Exit, Unsafe, ZLayer}
 
 import java.util.Base64
 import scala.concurrent.Await
@@ -69,13 +69,15 @@ object DiscordBot extends App {
               .split(" (?=([^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)").toIndexedSeq.map(stripQuotes),
             commandPrefix = "@Wessel's Bot")
 
-          zio.Runtime.default.unsafeRunSync(result.provideLayer(zioDependencies)) match {
-            case Exit.Success(SuccessText(text)) => send(CreateMessage(message.channelId, CreateMessageData(text.take(2000))))
-            case Exit.Success(SuccessPicture(attachment)) => send(CreateMessage(message.channelId, CreateMessageData(files = Seq(ByteFile(ContentType(MediaTypes.`image/png`),ByteString.fromArray(attachment),"plot.png")))))
-            case Exit.Failure(cause) => cause.failureOption match {
-              case Some(TechnicalError(e)) => println(s"Technical error. $e")
-              case Some(UserError(text)) => send(CreateMessage(message.channelId, CreateMessageData(text)))
-              case None => println("Unknown error")
+          Unsafe.unsafe{ implicit unsafe =>
+            zio.Runtime.default.unsafe.run(result.provideLayer(zioDependencies)) match {
+              case Exit.Success(SuccessText(text)) => send(CreateMessage(message.channelId, CreateMessageData(text.take(2000))))
+              case Exit.Success(SuccessPicture(attachment)) => send(CreateMessage(message.channelId, CreateMessageData(files = Seq(ByteFile(ContentType(MediaTypes.`image/png`), ByteString.fromArray(attachment), "plot.png")))))
+              case Exit.Failure(cause) => cause.failureOption match {
+                case Some(TechnicalError(e)) => println(s"Technical error. $e")
+                case Some(UserError(text)) => send(CreateMessage(message.channelId, CreateMessageData(text)))
+                case None => println("Unknown error")
+              }
             }
           }
         }

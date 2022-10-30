@@ -1,5 +1,6 @@
 package nl.wwbakker.services.dota.statistics
 
+import nl.wwbakker.services.dota.Clients.SttpClient
 import nl.wwbakker.services.dota.DotaApiRepo.DotaApiRepo
 import nl.wwbakker.services.dota.DotaMatchesRepo.DotaMatchRepoEnv
 import nl.wwbakker.services.dota.HeroRepo.{Hero, HeroRepoEnv}
@@ -7,13 +8,12 @@ import nl.wwbakker.services.dota.statistics.implementations._
 import nl.wwbakker.services.dota.statistics.model._
 import nl.wwbakker.services.dota.{DotaMatchesRepo, HeroRepo}
 import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
-import sttp.client3.asynchttpclient.zio.SttpClient
-import zio.{Has, ULayer, ZIO, ZLayer}
+import zio.{ULayer, ZIO, ZLayer}
 
 object MatchStatsService {
   // API
 
-  type MatchStatsServiceEnv = Has[MatchStatsService.Service]
+  type MatchStatsServiceEnv = MatchStatsService.Service
 
   trait Service {
     def winLoss: ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, String]
@@ -40,24 +40,24 @@ object MatchStatsService {
     HeroRepo.live ++ DotaMatchesRepo.dependencies
 
   def winLoss: ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient, Throwable, String] =
-    ZIO.accessM(_.get.winLoss)
+    ZIO.environmentWithZIO(_.get.winLoss)
 
   def winLossPlot: ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
-    ZIO.accessM(_.get.winLossPlot)
+    ZIO.environmentWithZIO(_.get.winLossPlot)
 
   def favoriteHeroes: ZIO[MatchStatsServiceEnv with HeroRepoEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
-    ZIO.accessM(_.get.favoriteHeroes)
+    ZIO.environmentWithZIO(_.get.favoriteHeroes)
 
   def heroWinratesGroupedByPlayer(heroStat: HeroStats.HeroStatGetter, highestToLowest: Boolean): ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
-    ZIO.accessM(_.get.heroWinRatesGroupedByPlayer(heroStat, highestToLowest))
+    ZIO.environmentWithZIO(_.get.heroWinRatesGroupedByPlayer(heroStat, highestToLowest))
 
   def heroWinRatesOverall(enemyTeam: Boolean): ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient with HeroRepoEnv, Throwable, String] =
-    ZIO.accessM(_.get.heroWinRatesOverall(enemyTeam))
+    ZIO.environmentWithZIO(_.get.heroWinRatesOverall(enemyTeam))
 
   def matchStatPlot(stat: PlayerStats.PlayerStatInfo): ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient, Throwable, Array[Byte]] =
-    ZIO.accessM(_.get.matchStatPlot(stat))
+    ZIO.environmentWithZIO(_.get.matchStatPlot(stat))
 
   def latestMatchesOverview: ZIO[MatchStatsServiceEnv with DotaMatchRepoEnv with SttpClient, Throwable, String] =
-    ZIO.accessM(_.get.latestMatchesOverview)
+    ZIO.environmentWithZIO(_.get.latestMatchesOverview)
 
 }
