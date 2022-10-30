@@ -30,71 +30,73 @@ object DotaApiRepo {
                          leaver_status: Int, party_size: Option[Int])
 
   // Service description
-  type DotaApiRepo = DotaApiRepo.Service
-
   trait Service {
-    def winLoss(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[SttpClient, Throwable, WinLoss]
+    def winLoss(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[Any, Throwable, WinLoss]
 
-    def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[SttpClient, Throwable, Seq[Peer]]
+    def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[Any, Throwable, Seq[Peer]]
 
-    def recentMatches(playerId: Int) : ZIO[SttpClient, Throwable, Seq[RecentMatch]]
+    def recentMatches(playerId: Int) : ZIO[Any, Throwable, Seq[RecentMatch]]
 
-    def rawMatch(matchId : Long) : ZIO[SttpClient, Throwable, String]
+    def rawMatch(matchId : Long) : ZIO[Any, Throwable, String]
   }
 
   // implementation
-  val live: ZLayer[SttpClient, Nothing, DotaApiRepo] = ZLayer.succeed(
-    new Service {
-      override def winLoss(playerId: Int, numberOfDaysInThePast: Int): ZIO[SttpClient, Throwable, WinLoss] =
-        callServiceAndDecode[WinLoss](uri"https://api.opendota.com/api/players/$playerId/wl?significant=0&date=$numberOfDaysInThePast")
+  case class ServiceImpl(sttpClient: SttpClient) extends Service {
+      override def winLoss(playerId: Int, numberOfDaysInThePast: Int): ZIO[Any, Throwable, WinLoss] =
+        callServiceAndDecode[WinLoss](sttpClient, uri"https://api.opendota.com/api/players/$playerId/wl?significant=0&date=$numberOfDaysInThePast")
 
-      override def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[SttpClient, Throwable, Seq[Peer]] =
-        callServiceAndDecode[Seq[Peer]](uri"https://api.opendota.com/api/players/$playerId/peers?significant=0&date=$numberOfDaysInThePast")
+      override def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[Any, Throwable, Seq[Peer]] =
+        callServiceAndDecode[Seq[Peer]](sttpClient, uri"https://api.opendota.com/api/players/$playerId/peers?significant=0&date=$numberOfDaysInThePast")
 
-      override def recentMatches(playerId: Int): ZIO[SttpClient, Throwable, Seq[RecentMatch]] =
-        callServiceAndDecode[Seq[RecentMatch]](uri"https://api.opendota.com/api/players/$playerId/matches?significant=0")
+      override def recentMatches(playerId: Int): ZIO[Any, Throwable, Seq[RecentMatch]] =
+        callServiceAndDecode[Seq[RecentMatch]](sttpClient, uri"https://api.opendota.com/api/players/$playerId/matches?significant=0")
 
-      override def rawMatch(matchId : Long) : ZIO[SttpClient, Throwable, String] =
-        callService(uri"https://api.opendota.com/api/matches/$matchId")
-    }
-  )
+      override def rawMatch(matchId : Long) : ZIO[Any, Throwable, String] =
+        callService(sttpClient, uri"https://api.opendota.com/api/matches/$matchId")
 
-  val dependencies: ZLayer[Any, Throwable, SttpClient with DotaApiRepo] =
-    Clients.live >+> DotaApiRepo.live
 
-  private def callService(uri : Uri): ZIO[SttpClient, Throwable, String] =
-    ZIO.environmentWithZIO(r =>
+    private def callService(sttpClient: SttpClient, uri: Uri): ZIO[Any, Throwable, String] =
+      for {
+        response <- sttpClient.send(basicRequest.get(uri))
+        response200 <- filter200Response(response)
+      } yield response200
+
+    private def callServiceAndDecode[A: Decoder](sttpClient: SttpClient, uri: Uri): ZIO[Any, Throwable, A] =
+      for {
+        textResponse <- callService(sttpClient, uri)
+        decoded <- decodeTo[A](textResponse)
+      } yield decoded
+
+    private def filter200Response(response: Response[Either[String, String]]): IO[Throwable, String] =
+      ZIO.fromEither(response.body.swap.map(e =>
+        new IllegalStateException(s"Received error from service:\n $e")).swap)
+
+    private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
+      ZIO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
+
+  }
+
+  object ServiceImpl {
+    val live: ZLayer[SttpClient, Nothing, DotaApiRepo.Service] =
+      ZLayer {
         for {
-          response <- r.get.send(basicRequest.get(uri))
-          response200 <- filter200Response(response)
-        } yield response200
-    )
-
-  private def callServiceAndDecode[A: Decoder](uri: Uri): ZIO[SttpClient, Throwable, A] =
-    for {
-      textResponse <- callService(uri)
-      decoded <- decodeTo[A](textResponse)
-    } yield decoded
-
-  private def filter200Response(response: Response[Either[String, String]]): IO[Throwable, String] =
-    ZIO.fromEither(response.body.swap.map(e =>
-      new IllegalStateException(s"Received error from service:\n $e")).swap)
-
-  private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
-    ZIO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
+          client <- ZIO.service[SttpClient]
+        } yield new ServiceImpl(client)
+      }
+  }
 
 
   // API
-  def winLoss(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[DotaApiRepo with SttpClient, Throwable, WinLoss] =
+  def winLoss(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[DotaApiRepo.Service, Throwable, WinLoss] =
     ZIO.environmentWithZIO(_.get.winLoss(playerId, numberOfDaysInThePast))
 
-  def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[DotaApiRepo with SttpClient, Throwable, Seq[Peer]] =
+  def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[DotaApiRepo.Service, Throwable, Seq[Peer]] =
     ZIO.environmentWithZIO(_.get.peers(playerId, numberOfDaysInThePast))
 
-  def recentMatches(playerId: Int): ZIO[DotaApiRepo with SttpClient, Throwable, Seq[RecentMatch]] =
+  def recentMatches(playerId: Int): ZIO[DotaApiRepo.Service, Throwable, Seq[RecentMatch]] =
     ZIO.environmentWithZIO(_.get.recentMatches(playerId))
 
-  def rawMatch(matchId : Int) : ZIO[DotaApiRepo with SttpClient, Throwable, String] =
+  def rawMatch(matchId : Int) : ZIO[DotaApiRepo.Service, Throwable, String] =
     ZIO.environmentWithZIO(_.get.rawMatch(matchId))
 
 }

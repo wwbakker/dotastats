@@ -6,16 +6,11 @@ import ackcord.requests.{CreateMessage, CreateMessageData, Request}
 import ackcord.{APIMessage, CacheSnapshot, ClientSettings, DiscordClient}
 import akka.http.scaladsl.model.{ContentType, MediaTypes}
 import akka.util.ByteString
-import nl.wwbakker.services.dota.Clients.SttpClient
-import nl.wwbakker.services.dota.DotaApiRepo.DotaApiRepo
-import nl.wwbakker.services.dota.DotaMatchesRepo.DotaMatchRepoEnv
-import nl.wwbakker.services.dota.HeroRepo.HeroRepoEnv
-import nl.wwbakker.services.dota.statistics.MatchStatsService
-import nl.wwbakker.services.dota.statistics.MatchStatsService.MatchStatsServiceEnv
-import nl.wwbakker.services.dota.{DotaApiRepo, DotaMatchesRepo}
-import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
+import nl.wwbakker.services.dota.statistics.StatisticsServices
+import nl.wwbakker.services.dota.{Clients, DotaApiRepo, DotaMatchesRepo}
+import nl.wwbakker.services.generic.LocalStorageRepo
 import os.Path
-import zio.{Exit, Unsafe, ZLayer}
+import zio.{Exit, Unsafe}
 
 import java.util.Base64
 import scala.concurrent.Await
@@ -27,8 +22,8 @@ object DiscordBot extends App {
   val token: String = os.read(tokenPath).strip()
   val clientId: UserId = UserId(token.split('.').headOption.map(Base64.getDecoder.decode).map(new String(_)).get)
   val clientSettings: ClientSettings = ClientSettings(token)
-  val zioDependencies: ZLayer[Any, TechnicalError, SttpClient with DotaApiRepo with LocalStorageRepo with DotaMatchRepoEnv with HeroRepoEnv with MatchStatsServiceEnv] =
-    (DotaApiRepo.dependencies ++ DotaMatchesRepo.dependencies ++ MatchStatsService.dependencies ++ MatchStatsService.live).mapError(TechnicalError.apply)
+  val zioDependencies =
+    Clients.live ++ StatisticsServices.live ++ LocalStorageRepo.ServiceImpl.live ++ DotaApiRepo.ServiceImpl.live ++ DotaMatchesRepo.ServiceImpl.live
 
   import clientSettings.executionContext
 
