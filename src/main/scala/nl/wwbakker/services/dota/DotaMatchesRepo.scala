@@ -5,12 +5,10 @@ import io.circe.Decoder
 import io.circe.generic.auto._
 import io.circe.parser.decode
 import nl.wwbakker.misc.Utils.localDateTimeFromUnixTimestamp
-import nl.wwbakker.services.dota.DotaApiRepo.{DotaApiRepo, RecentMatch}
+import nl.wwbakker.services.dota.DotaApiRepo.RecentMatch
 import nl.wwbakker.services.dota.statistics.model.Players
 import nl.wwbakker.services.generic.LocalStorageRepo
-import nl.wwbakker.services.generic.LocalStorageRepo.LocalStorageRepo
-import sttp.client3.asynchttpclient.zio.SttpClient
-import zio.{Has, IO, UIO, ZIO, ZLayer}
+import zio.{IO, UIO, ZIO, ZLayer}
 
 object DotaMatchesRepo {
   private val numberOfGamesCutOff = 100
@@ -29,23 +27,26 @@ object DotaMatchesRepo {
     def wesselWon: Boolean = players.find(_.account_id.contains(Players.wesselId)).exists(_.win == 1)
   }
 
-  type DotaMatchRepoEnv = Has[DotaMatchesRepo.Service]
+  trait Service {
+    def latestGames(playerId: Int): ZIO[Any, Throwable, Seq[Match]]
+  }
 
 
-  class Service(dotaApiRepo: DotaApiRepo.Service, localStorageRepo: LocalStorageRepo.Service) {
-    def latestGames(playerId: Int): ZIO[SttpClient, Throwable, Seq[Match]] =
+  case class ServiceImpl(dotaApiRepo: DotaApiRepo.Service, localStorageRepo: LocalStorageRepo.Service) extends Service {
+    def latestGames(playerId: Int): ZIO[Any, Throwable, Seq[Match]] =
       for {
-        cachedMatchesAsString        <- localStorageRepo.list()
-        decodedCachedMatches         <- ZIO.foreachPar(cachedMatchesAsString)(decodeTo[Match])
-        recentMatches                <- dotaApiRepo.recentMatches(playerId)
-        matchIdsToRetrieve           <- nonCachedMatchIds(decodedCachedMatches, recentMatches.take(numberOfGamesCutOff))
-        retrievedMatchDataAsString   <- ZIO.foreachPar(matchIdsToRetrieve)(dotaApiRepo.rawMatch)
-        _                            <- ZIO.foreach(retrievedMatchDataAsString)(localStorageRepo.add)
-        retrievedMatches             <- ZIO.foreachPar(retrievedMatchDataAsString)(decodeTo[Match])
+        cachedMatchesAsString         <- localStorageRepo.list()
+        decodedCachedMatches          <- ZIO.foreachPar(cachedMatchesAsString)(decodeTo[Match])
+        recentMatches                 <- dotaApiRepo.recentMatches(playerId)
+        matchIdsToRetrieve            <- nonCachedMatchIds(decodedCachedMatches, recentMatches.take(numberOfGamesCutOff))
+        tryRetrievedMatchDataAsString <- ZIO.foreachPar(matchIdsToRetrieve)(id => dotaApiRepo.rawMatch(id).option)
+        retrievedMatchDataAsString    = tryRetrievedMatchDataAsString.collect{ case Some(matchData) => matchData }
+        _                             <- ZIO.foreach(retrievedMatchDataAsString)(localStorageRepo.add)
+        retrievedMatches              <- ZIO.foreachPar(retrievedMatchDataAsString)(decodeTo[Match])
       } yield (decodedCachedMatches :++ retrievedMatches).sortBy(_.start_time).reverse.take(numberOfGamesCutOff)
 
     private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
-      IO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
+      ZIO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
 
 
     private def nonCachedMatchIds(cachedMatches: Seq[Match], recentMatches: Seq[RecentMatch]): UIO[Seq[Long]] =
@@ -57,16 +58,18 @@ object DotaMatchesRepo {
 
   }
 
-  val live: ZLayer[DotaApiRepo with LocalStorageRepo, Throwable, DotaMatchRepoEnv] =
-    ZLayer.fromServices[DotaApiRepo.Service, LocalStorageRepo.Service, Service](
-      new Service(_, _)
-    )
-
-  val dependencies: ZLayer[Any, Throwable, SttpClient with DotaApiRepo with LocalStorageRepo with DotaMatchRepoEnv] =
-    (DotaApiRepo.dependencies ++ LocalStorageRepo.live) >+> DotaMatchesRepo.live
+  object ServiceImpl {
+    val live: ZLayer[DotaApiRepo.Service with LocalStorageRepo.Service, Nothing, DotaMatchesRepo.Service] =
+      ZLayer {
+        for {
+          dar <- ZIO.service[DotaApiRepo.Service]
+          lsr <- ZIO.service[LocalStorageRepo.Service]
+        } yield ServiceImpl(dar, lsr)
+      }
+  }
 
   // front-facing API
-  def latestGames(playerId: Int): ZIO[Any with DotaMatchRepoEnv with SttpClient, Throwable, Seq[Match]] =
-    ZIO.accessM(_.get.latestGames(playerId))
+  def latestGames(playerId: Int): ZIO[DotaMatchesRepo.Service, Throwable, Seq[Match]] =
+    ZIO.environmentWithZIO(_.get.latestGames(playerId))
 
 }

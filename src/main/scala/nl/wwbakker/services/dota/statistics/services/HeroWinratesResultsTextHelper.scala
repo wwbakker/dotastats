@@ -1,9 +1,9 @@
-package nl.wwbakker.services.dota.statistics.implementations
+package nl.wwbakker.services.dota.statistics.services
 
 import nl.wwbakker.services.dota.statistics.model.HeroStats.HeroStatWinrate
 import zio.{UIO, ZIO}
 
-trait HeroWinratesResultsTextImpl {
+trait HeroWinratesResultsTextHelper {
   def resultsText(heroNamesWithWinrate: Seq[(Long, Seq[HeroStatWinrate])]): UIO[String] =
     ZIO.succeed(
       heroNamesWithWinrate.map { case (winrate, heroesWithWinrates) =>
