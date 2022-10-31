@@ -27,23 +27,23 @@ object CommandHandler {
     override def handleCommand(args: Seq[String], commandPrefix: String = ""): ZIO[Any, DotabotError, DotabotSuccess] = {
       args.toList match {
         case "winloss" :: Nil =>
-          winLoss.winLoss.mapError(TechnicalError.apply).map(SuccessText)
+          winLoss.winLoss.mapError(TechnicalError.apply).map(SuccessText.apply)
         case "winlossplot" :: Nil =>
-          winLossPlot.winLossPlot.mapError(TechnicalError.apply).map(SuccessPicture)
+          winLossPlot.winLossPlot.mapError(TechnicalError.apply).map(SuccessPicture.apply)
         case "favorite" :: "hero" :: Nil =>
-          favoriteHero.favoriteHeroes.mapError(TechnicalError.apply).map(SuccessText)
+          favoriteHero.favoriteHeroes.mapError(TechnicalError.apply).map(SuccessText.apply)
         case "best" :: statName :: Nil =>
-          topBottomHeroStats(statName, highestToLowest = true).map(SuccessText)
+          topBottomHeroStats(statName, highestToLowest = true).map(SuccessText.apply)
         case "worst" :: statName :: Nil =>
-          topBottomHeroStats(statName, highestToLowest = false).map(SuccessText)
+          topBottomHeroStats(statName, highestToLowest = false).map(SuccessText.apply)
         case "friendly" :: "team" :: Nil =>
-          heroWinratesOverall.heroWinRatesOverall(enemyTeam = false).mapError(TechnicalError.apply).map(SuccessText)
+          heroWinratesOverall.heroWinRatesOverall(enemyTeam = false).mapError(TechnicalError.apply).map(SuccessText.apply)
         case "enemy" :: "team" :: Nil =>
-          heroWinratesOverall.heroWinRatesOverall(enemyTeam = true).mapError(TechnicalError.apply).map(SuccessText)
+          heroWinratesOverall.heroWinRatesOverall(enemyTeam = true).mapError(TechnicalError.apply).map(SuccessText.apply)
         case "plot" :: statName :: Nil =>
-          matchStatsPlot(statName).map(SuccessPicture)
+          matchStatsPlot(statName).map(SuccessPicture.apply)
         case "latestmatches" :: Nil =>
-          latestMatches.latestMatchesOverview.mapError(TechnicalError.apply).map(SuccessText)
+          latestMatches.latestMatchesOverview.mapError(TechnicalError.apply).map(SuccessText.apply)
         case _ =>
           ZIO.fail(
             UserError(

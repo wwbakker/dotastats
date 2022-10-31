@@ -2,7 +2,7 @@ name := "dotabot"
 
 version := "0.1"
 
-scalaVersion := "2.13.5"
+scalaVersion := "3.2.0"
 
 resolvers += Resolver.JCenterRepository // for ackcord
 resolvers += "dv8tion" at "https://m2.dv8tion.net/releases"
@@ -20,7 +20,7 @@ testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 libraryDependencies += "com.softwaremill.sttp.client3" %% "core" % "3.8.3"
 libraryDependencies += "com.softwaremill.sttp.client3" %% "async-http-client-backend-zio" % "3.8.3"
 
-libraryDependencies += "net.katsstuff" %% "ackcord" % "0.18.1"
+libraryDependencies += ("net.katsstuff" %% "ackcord" % "0.18.1").cross(CrossVersion.for3Use2_13)
 libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.4.4" // akka logging
 
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.8.1"
