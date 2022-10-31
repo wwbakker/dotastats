@@ -8,10 +8,12 @@ import zio.{Scope, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer}
 object App extends ZIOAppDefault{
 
     override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] = {
-      val program = for {
-        ds <- ZIO.service[Discord.Service]
-        _ <- ds.handleMessages.runDrain
-      } yield ()
+      val program =
+        for {
+          ds <- ZIO.service[Discord.Service]
+          _ <- ZIO.scoped { ds.handleMessages.flatMap(_.runDrain) }
+        } yield ()
+
 
       val layer1 = Clients.live ++ LocalStorageRepo.ServiceImpl.live
       val layer2 = DotaApiRepo.ServiceImpl.live

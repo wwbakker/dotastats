@@ -8,7 +8,7 @@ import akka.http.scaladsl.model.{ContentType, MediaTypes}
 import akka.util.ByteString
 import os.Path
 import zio.stream.ZStream
-import zio.{Task, URIO, ZIO, ZLayer}
+import zio.{Scope, Task, UIO, URIO, ZIO, ZLayer}
 
 import java.util.Base64
 import scala.concurrent.{ExecutionContext, Future}
@@ -16,23 +16,38 @@ import scala.concurrent.{ExecutionContext, Future}
 object Discord {
 
   trait Service {
-    def handleMessages: ZStream[Any, Throwable, Unit]
+    def handleMessages: ZIO[Scope, Nothing, ZStream[Any, Throwable, Unit]]
   }
 
   case class ServiceImpl(discordClient: DiscordClient, clientId: UserId, commandHandler: CommandHandler.Service) extends Service {
     case class MessageAndCacheSnapshot(message: Message, cacheSnapshot: CacheSnapshot)
 
-    override def handleMessages: ZStream[Any, Throwable, Unit] =
-      messages.mapZIO(mc => handleMessage(mc.message)(mc.cacheSnapshot))
+    override def handleMessages: ZIO[Scope, Nothing, ZStream[Any, Throwable, Unit]] =
+      messages.map(_.mapZIO(mc => handleMessage(mc.message)(mc.cacheSnapshot)))
 
-    private val messages: ZStream[Any, Throwable, MessageAndCacheSnapshot] =
+    private def messagesStream(ref: zio.Ref[Option[ListenStopper]]): ZStream[Any, Throwable, MessageAndCacheSnapshot] =
       ZStream.async[Any, Throwable, MessageAndCacheSnapshot] { callback =>
         println("Registering messages stream.")
-        // TODO: call registration.close
         val registration = discordClient.onEventSideEffects { implicit c => {
           case APIMessage.MessageCreate(_, message, _, _) => callback(ZIO.succeed(zio.Chunk(MessageAndCacheSnapshot(message, c))))
         }
         }
+        ref.set(Some(ListenStopper{ () =>
+          println("Deregistering message stream.")
+          registration.stop()
+        }))
+      }
+
+    case class ListenStopper(stop : () => Unit)
+    private val messages: ZIO[Scope, Nothing, ZStream[Any, Throwable, MessageAndCacheSnapshot]] = {
+        for {
+          ref <- zio.Ref.make[Option[ListenStopper]](None)
+          messagesStream <- ZIO.acquireRelease(ZIO.succeed(messagesStream(ref)))(_ =>
+            ref.get.map(listenerStopperOption =>
+              listenerStopperOption.foreach(_.stop())
+            )
+          )
+        } yield messagesStream
       }
 
     private def handleMessage(message: Message)(implicit cacheSnapshot: CacheSnapshot) = {
@@ -95,7 +110,6 @@ object Discord {
     private def release(client: DiscordClient): URIO[Any, Unit] = ZIO.fromFuture { implicit ec =>
       for {
         _ <- Future.successful(println("Shutting down discord client"))
-        _ <- client.logout().recover(e => println(s"Could not logout from ackcord: $e. Proceeding"))
         _ <- client.shutdownAckCord().recover(e => println(s"Could not shut down ackcord: $e. Proceeding"))
       } yield ()
     }.orDie
