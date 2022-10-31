@@ -1,11 +1,9 @@
 package nl.wwbakker.services.dota
 
-import io.circe.Decoder
-import io.circe.generic.auto._
-import io.circe.parser.decode
 import nl.wwbakker.services.dota.Clients.SttpClient
 import sttp.client3.{Response, UriContext, basicRequest}
 import sttp.model.Uri
+import zio.json.{DecoderOps, DeriveJsonDecoder, JsonDecoder}
 import zio.{IO, ZIO, ZLayer}
 
 object DotaApiRepo {
@@ -65,7 +63,10 @@ object DotaApiRepo {
         response200 <- filter200Response(response)
       } yield response200
 
-    private def callServiceAndDecode[A: Decoder](sttpClient: SttpClient, uri: Uri): ZIO[Any, Throwable, A] =
+    private implicit val decoderWinLoss: JsonDecoder[WinLoss] = DeriveJsonDecoder.gen[WinLoss]
+    private implicit val decoderPeer: JsonDecoder[Peer] = DeriveJsonDecoder.gen[Peer]
+    private implicit val decoderRecentMatch: JsonDecoder[RecentMatch] = DeriveJsonDecoder.gen[RecentMatch]
+    private def callServiceAndDecode[A: JsonDecoder](sttpClient: SttpClient, uri: Uri): ZIO[Any, Throwable, A] =
       for {
         textResponse <- callService(sttpClient, uri)
         decoded <- decodeTo[A](textResponse)
@@ -75,8 +76,8 @@ object DotaApiRepo {
       ZIO.fromEither(response.body.swap.map(e =>
         new IllegalStateException(s"Received error from service:\n $e")).swap)
 
-    private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
-      ZIO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
+    private def decodeTo[A: JsonDecoder](body: String): IO[Throwable, A] =
+      ZIO.fromEither(body.fromJson[A].swap.map(new IllegalStateException(_)).swap)
 
   }
 

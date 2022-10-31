@@ -9,6 +9,7 @@ resolvers += "dv8tion" at "https://m2.dv8tion.net/releases"
 
 libraryDependencies += "dev.zio" %% "zio" % "2.0.2"
 libraryDependencies += "dev.zio" %% "zio-streams" % "2.0.2"
+libraryDependencies += "dev.zio" %% "zio-json" % "0.3.0"
 libraryDependencies ++= Seq(
   "dev.zio" %% "zio-test"          % "2.0.2" % Test,
   "dev.zio" %% "zio-test-sbt"      % "2.0.2" % Test,
@@ -25,11 +26,3 @@ libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.4.4" // akka lo
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.8.1"
 
 libraryDependencies += "de.sciss" %% "scala-chart" % "0.8.0"
-
-val circeVersion = "0.12.3"
-
-libraryDependencies ++= Seq(
-  "io.circe" %% "circe-core",
-  "io.circe" %% "circe-generic",
-  "io.circe" %% "circe-parser"
-).map(_ % circeVersion)

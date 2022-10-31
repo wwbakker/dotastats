@@ -1,13 +1,10 @@
 package nl.wwbakker.services.dota
 
-
-import io.circe.Decoder
-import io.circe.generic.auto._
-import io.circe.parser.decode
 import nl.wwbakker.misc.Utils.localDateTimeFromUnixTimestamp
 import nl.wwbakker.services.dota.DotaApiRepo.RecentMatch
 import nl.wwbakker.services.dota.statistics.model.Players
 import nl.wwbakker.services.generic.LocalStorageRepo
+import zio.json.{DecoderOps, DeriveJsonDecoder, JsonDecoder}
 import zio.{IO, UIO, ZIO, ZLayer}
 
 object DotaMatchesRepo {
@@ -45,9 +42,12 @@ object DotaMatchesRepo {
         retrievedMatches              <- ZIO.foreachPar(retrievedMatchDataAsString)(decodeTo[Match])
       } yield (decodedCachedMatches :++ retrievedMatches).sortBy(_.start_time).reverse.take(numberOfGamesCutOff)
 
-    private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
-      ZIO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
 
+    private implicit val decoderPlayer: JsonDecoder[Player] = DeriveJsonDecoder.gen[Player]
+    private implicit val decoderMatch: JsonDecoder[Match] = DeriveJsonDecoder.gen[Match]
+
+    private def decodeTo[A: JsonDecoder](body: String): IO[Throwable, A] =
+      ZIO.fromEither(body.fromJson[A].swap.map(new IllegalStateException(_)).swap)
 
     private def nonCachedMatchIds(cachedMatches: Seq[Match], recentMatches: Seq[RecentMatch]): UIO[Seq[Long]] =
       ZIO.succeed(

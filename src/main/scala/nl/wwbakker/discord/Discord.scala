@@ -95,8 +95,8 @@ object Discord {
     private def release(client: DiscordClient): URIO[Any, Unit] = ZIO.fromFuture { implicit ec =>
       for {
         _ <- Future.successful(println("Shutting down discord client"))
-        _ <- client.logout()
-        _ <- client.shutdownAckCord()
+        _ <- client.logout().recover(e => println(s"Could not logout from ackcord: $e. Proceeding"))
+        _ <- client.shutdownAckCord().recover(e => println(s"Could not shut down ackcord: $e. Proceeding"))
       } yield ()
     }.orDie
 
