@@ -24,7 +24,7 @@ object DotaApiRepo {
                   is_contributor: Boolean, last_login: Option[String],
                   avatar: Option[String], avatarfull: Option[String])
 
-  case class RecentMatch(match_id: Long, player_slot: Int, radiant_win: Boolean, hero_id: Int,
+  case class RecentMatch(match_id: Long, player_slot: Int, radiant_win: Option[Boolean], hero_id: Int,
                          start_time: Int, duration: Int, game_mode: Int, lobby_type: Int,
                          kills: Int, deaths: Int, assists: Int, skill: Option[Int],
                          leaver_status: Int, party_size: Option[Int])

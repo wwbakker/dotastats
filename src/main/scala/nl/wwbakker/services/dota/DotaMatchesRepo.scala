@@ -35,13 +35,14 @@ object DotaMatchesRepo {
   case class ServiceImpl(dotaApiRepo: DotaApiRepo.Service, localStorageRepo: LocalStorageRepo.Service) extends Service {
     def latestGames(playerId: Int): ZIO[Any, Throwable, Seq[Match]] =
       for {
-        cachedMatchesAsString        <- localStorageRepo.list()
-        decodedCachedMatches         <- ZIO.foreachPar(cachedMatchesAsString)(decodeTo[Match])
-        recentMatches                <- dotaApiRepo.recentMatches(playerId)
-        matchIdsToRetrieve           <- nonCachedMatchIds(decodedCachedMatches, recentMatches.take(numberOfGamesCutOff))
-        retrievedMatchDataAsString   <- ZIO.foreachPar(matchIdsToRetrieve)(dotaApiRepo.rawMatch)
-        _                            <- ZIO.foreach(retrievedMatchDataAsString)(localStorageRepo.add)
-        retrievedMatches             <- ZIO.foreachPar(retrievedMatchDataAsString)(decodeTo[Match])
+        cachedMatchesAsString         <- localStorageRepo.list()
+        decodedCachedMatches          <- ZIO.foreachPar(cachedMatchesAsString)(decodeTo[Match])
+        recentMatches                 <- dotaApiRepo.recentMatches(playerId)
+        matchIdsToRetrieve            <- nonCachedMatchIds(decodedCachedMatches, recentMatches.take(numberOfGamesCutOff))
+        tryRetrievedMatchDataAsString <- ZIO.foreachPar(matchIdsToRetrieve)(id => dotaApiRepo.rawMatch(id).option)
+        retrievedMatchDataAsString    = tryRetrievedMatchDataAsString.collect{ case Some(matchData) => matchData }
+        _                             <- ZIO.foreach(retrievedMatchDataAsString)(localStorageRepo.add)
+        retrievedMatches              <- ZIO.foreachPar(retrievedMatchDataAsString)(decodeTo[Match])
       } yield (decodedCachedMatches :++ retrievedMatches).sortBy(_.start_time).reverse.take(numberOfGamesCutOff)
 
     private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =

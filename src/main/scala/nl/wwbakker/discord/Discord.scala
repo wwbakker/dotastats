@@ -1,14 +1,14 @@
 package nl.wwbakker.discord
 
-import ackcord.{APIMessage, CacheSnapshot, ClientSettings, DiscordClient, OptFuture}
 import ackcord.data.{Message, UserId}
 import ackcord.requests.CreateMessageFile.ByteFile
 import ackcord.requests.{CreateMessage, CreateMessageData, Request}
+import ackcord.{APIMessage, CacheSnapshot, ClientSettings, DiscordClient}
 import akka.http.scaladsl.model.{ContentType, MediaTypes}
 import akka.util.ByteString
 import os.Path
 import zio.stream.ZStream
-import zio.{Scope, Task, URIO, ZIO, ZLayer}
+import zio.{Task, URIO, ZIO, ZLayer}
 
 import java.util.Base64
 import scala.concurrent.{ExecutionContext, Future}
@@ -25,8 +25,9 @@ object Discord {
     override def handleMessages: ZStream[Any, Throwable, Unit] =
       messages.mapZIO(mc => handleMessage(mc.message)(mc.cacheSnapshot))
 
-    def messages: ZStream[Any, Throwable, MessageAndCacheSnapshot] =
+    private val messages: ZStream[Any, Throwable, MessageAndCacheSnapshot] =
       ZStream.async[Any, Throwable, MessageAndCacheSnapshot] { callback =>
+        println("Registering messages stream.")
         // TODO: call registration.close
         val registration = discordClient.onEventSideEffects { implicit c => {
           case APIMessage.MessageCreate(_, message, _, _) => callback(ZIO.succeed(zio.Chunk(MessageAndCacheSnapshot(message, c))))
@@ -71,7 +72,7 @@ object Discord {
       stripEndQuote(stripStartQuote(s))
 
     def removeMentions(content: String): String =
-      content.replaceAll("<@![0-9]+> ", "")
+      content.replaceAll("<@[0-9]+> ", "")
 
     private def send[A](request: Request[A])(implicit c: CacheSnapshot, ec: ExecutionContext): Future[Unit] =
       discordClient.requestsHelper.run(request).value.map(_ => ())
@@ -86,23 +87,21 @@ object Discord {
     private val clientSettings: ClientSettings = ClientSettings(token)
     private val acquire: Task[DiscordClient] = ZIO.fromFuture { implicit ec =>
       for {
+        _ <- Future.successful(println("Creating Discord client"))
         client <- clientSettings.createClient()
         _ = client.login()
       } yield client
     }
     private def release(client: DiscordClient): URIO[Any, Unit] = ZIO.fromFuture { implicit ec =>
       for {
+        _ <- Future.successful(println("Shutting down discord client"))
         _ <- client.logout()
         _ <- client.shutdownAckCord()
       } yield ()
     }.orDie
 
     val liveDiscordClient: ZLayer[Any, Throwable, DiscordClient] =
-      ZLayer.fromZIO(
-        ZIO.scoped {
-          ZIO.acquireRelease(acquire)(release)
-        }
-      )
+      ZLayer.scoped(ZIO.acquireRelease(acquire)(release))
 
     val live: ZLayer[DiscordClient with CommandHandler.Service, Nothing, Discord.Service] = ZLayer {
       for {
