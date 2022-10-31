@@ -3,9 +3,8 @@ package nl.wwbakker.services.dota
 import io.circe.Decoder
 import io.circe.generic.auto._
 import io.circe.parser.decode
-import zio.{IO, ZIO, ZLayer}
-
-import scala.io.Source
+import nl.wwbakker.services.generic.LocalStorageRepo
+import zio.{IO, Task, ZIO, ZLayer}
 
 object HeroRepo {
 
@@ -17,12 +16,11 @@ object HeroRepo {
     def heroes: IO[Throwable, Seq[Hero]]
   }
 
-  case class ServiceImpl() extends Service {
+  case class ServiceImpl(localStorageRepo: LocalStorageRepo.Service, dotaApiRepo: DotaApiRepo.Service) extends Service {
     override def heroes: IO[Throwable, Seq[Hero]] =
       for {
-        heroesJsonText <- ZIO.attempt {
-          Source.fromResource("heroes.json").mkString
-        }
+        heroesJsonTextOption <- localStorageRepo.heroes()
+        heroesJsonText <- putIfAbsent(heroesJsonTextOption)
         heroes <- decodeTo[Seq[Hero]](heroesJsonText)
       } yield heroes
 
@@ -33,7 +31,16 @@ object HeroRepo {
         hero <- findHero(id, allHeroes)
       } yield hero
 
+    def putIfAbsent(heroesJsonTextOption: Option[String]): Task[String] = {
+      heroesJsonTextOption match {
+        case Some(cachedHeroes) => ZIO.succeed(cachedHeroes)
+        case None => for {
+          rawHeroes <- dotaApiRepo.rawHeroes
+          _         <- localStorageRepo.storeHeroes(rawHeroes)
+        } yield rawHeroes
 
+      }
+    }
     private def decodeTo[A: Decoder](body: String): IO[Throwable, A] =
       ZIO.fromEither(decode[A](body).swap.map(new IllegalStateException(_)).swap)
 
@@ -45,15 +52,13 @@ object HeroRepo {
   }
 
   object ServiceImpl {
-    val live : ZLayer[Any, Nothing, HeroRepo.Service] =
-      ZLayer.succeed(new ServiceImpl())
+    val live: ZLayer[DotaApiRepo.Service with LocalStorageRepo.Service, Nothing, HeroRepo.Service] =
+      ZLayer {
+        for {
+          lsr <- ZIO.service[LocalStorageRepo.Service]
+          dar <- ZIO.service[DotaApiRepo.Service]
+        } yield ServiceImpl(lsr, dar)
+      }
   }
-
-  // front-facing API
-  def hero(id: Int): ZIO[HeroRepo.Service, Throwable, Hero] =
-    ZIO.environmentWithZIO(_.get.hero(id))
-
-  def heroes: ZIO[HeroRepo.Service, Throwable, Seq[Hero]] =
-    ZIO.environmentWithZIO(_.get.heroes)
 
 }

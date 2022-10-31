@@ -38,22 +38,26 @@ object DotaApiRepo {
     def recentMatches(playerId: Int) : ZIO[Any, Throwable, Seq[RecentMatch]]
 
     def rawMatch(matchId : Long) : ZIO[Any, Throwable, String]
+
+    def rawHeroes : ZIO[Any, Throwable, String]
   }
 
   // implementation
   case class ServiceImpl(sttpClient: SttpClient) extends Service {
-      override def winLoss(playerId: Int, numberOfDaysInThePast: Int): ZIO[Any, Throwable, WinLoss] =
-        callServiceAndDecode[WinLoss](sttpClient, uri"https://api.opendota.com/api/players/$playerId/wl?significant=0&date=$numberOfDaysInThePast")
+    override def winLoss(playerId: Int, numberOfDaysInThePast: Int): ZIO[Any, Throwable, WinLoss] =
+      callServiceAndDecode[WinLoss](sttpClient, uri"https://api.opendota.com/api/players/$playerId/wl?significant=0&date=$numberOfDaysInThePast")
 
-      override def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[Any, Throwable, Seq[Peer]] =
-        callServiceAndDecode[Seq[Peer]](sttpClient, uri"https://api.opendota.com/api/players/$playerId/peers?significant=0&date=$numberOfDaysInThePast")
+    override def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[Any, Throwable, Seq[Peer]] =
+      callServiceAndDecode[Seq[Peer]](sttpClient, uri"https://api.opendota.com/api/players/$playerId/peers?significant=0&date=$numberOfDaysInThePast")
 
-      override def recentMatches(playerId: Int): ZIO[Any, Throwable, Seq[RecentMatch]] =
-        callServiceAndDecode[Seq[RecentMatch]](sttpClient, uri"https://api.opendota.com/api/players/$playerId/matches?significant=0")
+    override def recentMatches(playerId: Int): ZIO[Any, Throwable, Seq[RecentMatch]] =
+      callServiceAndDecode[Seq[RecentMatch]](sttpClient, uri"https://api.opendota.com/api/players/$playerId/matches?significant=0")
 
-      override def rawMatch(matchId : Long) : ZIO[Any, Throwable, String] =
-        callService(sttpClient, uri"https://api.opendota.com/api/matches/$matchId")
+    override def rawMatch(matchId : Long) : ZIO[Any, Throwable, String] =
+      callService(sttpClient, uri"https://api.opendota.com/api/matches/$matchId")
 
+    override def rawHeroes: ZIO[Any, Throwable, String] =
+      callService(sttpClient, uri"https://api.opendota.com/api/heroes")
 
     private def callService(sttpClient: SttpClient, uri: Uri): ZIO[Any, Throwable, String] =
       for {
@@ -84,19 +88,4 @@ object DotaApiRepo {
         } yield new ServiceImpl(client)
       }
   }
-
-
-  // API
-  def winLoss(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[DotaApiRepo.Service, Throwable, WinLoss] =
-    ZIO.environmentWithZIO(_.get.winLoss(playerId, numberOfDaysInThePast))
-
-  def peers(playerId: Int, numberOfDaysInThePast: Int = 14): ZIO[DotaApiRepo.Service, Throwable, Seq[Peer]] =
-    ZIO.environmentWithZIO(_.get.peers(playerId, numberOfDaysInThePast))
-
-  def recentMatches(playerId: Int): ZIO[DotaApiRepo.Service, Throwable, Seq[RecentMatch]] =
-    ZIO.environmentWithZIO(_.get.recentMatches(playerId))
-
-  def rawMatch(matchId : Int) : ZIO[DotaApiRepo.Service, Throwable, String] =
-    ZIO.environmentWithZIO(_.get.rawMatch(matchId))
-
 }
