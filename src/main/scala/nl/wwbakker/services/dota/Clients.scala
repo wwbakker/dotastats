@@ -1,15 +1,20 @@
 package nl.wwbakker.services.dota
 
-import sttp.capabilities.WebSockets
 import sttp.capabilities.zio.ZioStreams
-import sttp.client3.SttpBackend
-import sttp.client3.asynchttpclient.zio.AsyncHttpClientZioBackend
-import zio.{Layer, Task}
+import sttp.client4.WebSocketStreamBackend
+import sttp.client4.httpclient.zio.HttpClientZioBackend
+import zio.{Task, ZLayer}
 
 object Clients {
-  type SttpClient = SttpBackend[Task, ZioStreams with WebSockets]
+  type SttpClient = WebSocketStreamBackend[Task, ZioStreams]
 
-  val live: Layer[Throwable, SttpClient] = AsyncHttpClientZioBackend.layer()
+  class HttpClient(inner: SttpClient) extends SttpClient:
+    export inner.*
+
+  val live: ZLayer[Any, Throwable, HttpClient] =
+    ZLayer.scoped(
+      HttpClientZioBackend.scoped().map(HttpClient(_))
+    )
 
 
 

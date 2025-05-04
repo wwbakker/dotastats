@@ -1,7 +1,7 @@
 package nl.wwbakker.services.dota
 
 import nl.wwbakker.services.dota.Clients.SttpClient
-import sttp.client3.{Response, UriContext, basicRequest}
+import sttp.client4.{Response, UriContext, basicRequest}
 import sttp.model.Uri
 import zio.json.{DecoderOps, DeriveJsonDecoder, JsonDecoder}
 import zio.{IO, ZIO, ZLayer}
@@ -82,10 +82,10 @@ object DotaApiRepo {
   }
 
   object ServiceImpl {
-    val live: ZLayer[SttpClient, Nothing, DotaApiRepo.Service] =
+    val live: ZLayer[Clients.HttpClient, Nothing, DotaApiRepo.Service] =
       ZLayer {
         for {
-          client <- ZIO.service[SttpClient]
+          client <- ZIO.service[Clients.HttpClient]
         } yield new ServiceImpl(client)
       }
   }

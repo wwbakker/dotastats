@@ -68,7 +68,7 @@ object HeroWinratesGroupedByPlayer {
   }
 
   object ServiceImpl {
-    val live: ZLayer[DotaMatchesRepo.Service with HeroRepo.Service, Nothing, HeroWinratesGroupedByPlayer.Service] = ZLayer {
+    val live: ZLayer[DotaMatchesRepo.Service & HeroRepo.Service, Nothing, HeroWinratesGroupedByPlayer.Service] = ZLayer {
       for {
         dmr <- ZIO.service[DotaMatchesRepo.Service]
         hr <- ZIO.service[HeroRepo.Service]

@@ -59,7 +59,7 @@ object DotaMatchesRepo {
   }
 
   object ServiceImpl {
-    val live: ZLayer[DotaApiRepo.Service with LocalStorageRepo.Service, Nothing, DotaMatchesRepo.Service] =
+    val live: ZLayer[DotaApiRepo.Service & LocalStorageRepo.Service, Nothing, DotaMatchesRepo.Service] =
       ZLayer {
         for {
           dar <- ZIO.service[DotaApiRepo.Service]

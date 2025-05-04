@@ -7,6 +7,7 @@ object Players {
 //  val buzzKillington = 66268281
   val chairmanId = 55277122
   //  private val nikolaId = 39067906
+  val jan = 22595249
 
-  val everyone = Seq(wesselId, chairmanId, beamcannon)
+  val everyone = Seq(wesselId, chairmanId, beamcannon, jan)
 }

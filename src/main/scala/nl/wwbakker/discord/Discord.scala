@@ -117,7 +117,7 @@ object Discord {
     val liveDiscordClient: ZLayer[Any, Throwable, DiscordClient] =
       ZLayer.scoped(ZIO.acquireRelease(acquire)(release))
 
-    val live: ZLayer[DiscordClient with CommandHandler.Service, Nothing, Discord.Service] = ZLayer {
+    val live: ZLayer[DiscordClient & CommandHandler.Service, Nothing, Discord.Service] = ZLayer {
       for {
         commandHandler <- ZIO.service[CommandHandler.Service]
         discordClient <- ZIO.service[DiscordClient]

@@ -41,7 +41,7 @@ object FavoriteHero {
   }
 
   object ServiceImpl {
-    val live: ZLayer[HeroRepo.Service with DotaMatchesRepo.Service, Nothing, FavoriteHero.Service] = ZLayer {
+    val live: ZLayer[HeroRepo.Service & DotaMatchesRepo.Service, Nothing, FavoriteHero.Service] = ZLayer {
       for {
         dmr <- ZIO.service[DotaMatchesRepo.Service]
         hr <- ZIO.service[HeroRepo.Service]

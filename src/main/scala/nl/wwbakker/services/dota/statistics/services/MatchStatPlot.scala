@@ -41,7 +41,7 @@ object MatchStatPlot {
       val playerSpecificDataSet: List[(Float, Float)] = playerSpecificResults.foldLeft(List.empty[(Float, Float)]) {
         case (previousPoints, playerMatch) =>
           val time = (now - playerMatch.start_time).toFloat / (60f * 60f * 24f) // convert seconds to days
-          (time, stat.statGetter(playerMatch)) :: previousPoints
+          (time, stat.statGetter(playerMatch).toFloat) :: previousPoints
       }
 
       (playerName, playerSpecificDataSet)

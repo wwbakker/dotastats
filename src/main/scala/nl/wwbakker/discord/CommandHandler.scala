@@ -82,7 +82,7 @@ object CommandHandler {
   }
 
   object ServiceImpl {
-    val live: ZLayer[WinLossPlot.Service with WinLoss.Service with MatchStatPlot.Service with LatestMatches.Service with HeroWinratesOverall.Service with HeroWinratesGroupedByPlayer.Service with FavoriteHero.Service, Nothing, CommandHandler.Service] =
+    val live: ZLayer[WinLossPlot.Service & WinLoss.Service & MatchStatPlot.Service & LatestMatches.Service & HeroWinratesOverall.Service & HeroWinratesGroupedByPlayer.Service & FavoriteHero.Service, Nothing, CommandHandler.Service] =
       ZLayer {
         for {
           favoriteHero <- ZIO.service[FavoriteHero.Service]
