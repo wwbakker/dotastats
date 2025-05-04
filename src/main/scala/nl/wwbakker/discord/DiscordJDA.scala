@@ -1,48 +1,63 @@
 package nl.wwbakker.discord
 
 import net.dv8tion.jda.api.JDABuilder
+import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion
 import net.dv8tion.jda.api.events.ExceptionEvent
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
 import net.dv8tion.jda.api.requests.GatewayIntent
+import net.dv8tion.jda.api.utils.FileUpload
 import os.Path
 import zio.*
 import zio.stream.*
 
 import java.util.Base64
-import scala.util.Try
 import scala.jdk.CollectionConverters.*
 
-object DiscordJDA {
+class DiscordJDA() {
+  opaque type Channel = MessageChannelUnion
+
   case class Message(
     content: String,
-    mentions: Seq[String]
+    mentions: Seq[String],
+    channel: Channel
   )
-
 
   // To generate the token, look in the developer portal under application > settings > bot > Build-A-Bot
   private val tokenPath: Path = os.home / ".dotabot" / "discord_token"
   private val token: String = os.read(tokenPath).strip()
   private val clientId: String = token.split('.').headOption.map(Base64.getDecoder.decode).map(new String(_)).get
 
+  def sendMessage(dotabotResult: Either[DotabotError, DotabotSuccess], channel: Channel): Task[Unit] = {
+      dotabotResult match {
+        case Right(SuccessText(text)) => ZIO.attemptBlocking(channel.sendMessage(text).queue())
+        case Right(SuccessPicture(data)) => ZIO.attemptBlocking(channel.sendMessage("").addFiles(FileUpload.fromData(data, "image.jpg")).queue())
+        case Left(UserError(text)) => ZIO.attemptBlocking(channel.sendMessage(text).queue())
+        case Left(TechnicalError(e)) => ZIO.logErrorCause("Technische fout" , Cause.fail(e))
+      }
+  }
+
   def startServer: ZStream[Any, Throwable, Message] =
     ZStream.asyncZIO { (emit: ZStream.Emit[Any, Throwable, Message, Unit]) =>
       ZIO.attemptBlocking {
         println("Starting JDA discord client")
+        val intents = GatewayIntent.getIntents(GatewayIntent.DEFAULT)
+        intents.add(GatewayIntent.MESSAGE_CONTENT)
         val jda = JDABuilder
-          .createLight(token)
+          .createLight(token, intents)
           .addEventListeners(new ListenerAdapter {
             override def onMessageReceived(event: MessageReceivedEvent): Unit = {
               val message = event.getMessage
+              val messageContents = message.getContentRaw
               val mentionIds = message.getMentions.getUsers.asScala.map(_.getId)
-
-              println(s"message: ${message.getContentRaw} - ${mentionIds.mkString(", ")}")
+              println(s"message: ${messageContents} - ${mentionIds.mkString(", ")}")
               if (mentionIds.contains(clientId)) {
                 // Handle the command here
                 println("Command received!")
                 emit(ZIO.succeed(Chunk.single(Message(
-                  content = message.getContentRaw,
-                  mentions = mentionIds.toSeq
+                  content = messageContents,
+                  mentions = mentionIds.toSeq,
+                  channel = event.getChannel
                 ))))
               }
             }
@@ -56,73 +71,14 @@ object DiscordJDA {
         jda.getRestPing.queue(ping => println("Logged in with ping: " + ping))
 
         jda.awaitReady()
-      }.logError("Error while starting JDA discord client").forever
+      }.logError("Error while starting JDA discord client")
     }
-
-
-
 
 }
 
-//object EventListenerLogic extends ListenerAdapter:
-//
-//
-//  override def onMessageReceived(event: MessageReceivedEvent) = {
-//    val message = event.getMessage
-//    val mentionIds = message.getMentions.getUsers.asScala.map(_.getId)
-//
-//    println(s"message: ${message.getContentRaw} - ${mentionIds.mkString(", ")}")
-//    if (mentionIds.contains(clientId)) {
-//      val result = commandHandler.handleCommand(
-//        args = removeMentions(message.content)
-//          .split(" (?=([^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)").toIndexedSeq.map(stripQuotes),
-//        commandPrefix = "@Wessel's Bot")
-//
-//      result.either.flatMap(reply(message, _))
-//    } else {
-//      ZIO.unit
-//    }
-//  }
-//
-//
-//  private def handleMessage(message: Message)(implicit cacheSnapshot: CacheSnapshot) = {
-//    println(s"message: ${message.content} - ${message.mentions.mkString(", ")}")
-//    if (message.mentions.contains(clientId)) {
-//      val result = commandHandler.handleCommand(
-//        args = removeMentions(message.content)
-//          .split(" (?=([^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)").toIndexedSeq.map(stripQuotes),
-//        commandPrefix = "@Wessel's Bot")
-//
-//      result.either.flatMap(reply(message, _))
-//    } else {
-//      ZIO.unit
-//    }
-//  }
-//
-//  private def reply(originalMessage: Message, result: Either[DotabotError, DotabotSuccess])(implicit c: CacheSnapshot): Task[Unit] = result match {
-//    case Left(UserError(text)) => ZIO.fromFuture(implicit ec => send(CreateMessage(originalMessage.channelId, CreateMessageData(text))))
-//    case Left(TechnicalError(e)) => ZIO.logError(s"Technical error. $e")
-//    case Right(SuccessText(text)) => ZIO.fromFuture(implicit ec => send(CreateMessage(originalMessage.channelId, CreateMessageData(text.take(2000)))))
-//    case Right(SuccessPicture(attachment)) => ZIO.fromFuture(implicit ec => send(CreateMessage(originalMessage.channelId, CreateMessageData(files = Seq(ByteFile(ContentType(MediaTypes.`image/png`), ByteString.fromArray(attachment), "plot.png"))))))
-//  }
-//
-//  def stripStartQuote(s: String): String =
-//    if (s.startsWith("\""))
-//      s.substring(1)
-//    else
-//      s
-//
-//  def stripEndQuote(s: String): String =
-//    if (s.endsWith("\""))
-//      s.substring(0, s.length - 1)
-//    else
-//      s
-//
-//  def stripQuotes(s: String): String =
-//    stripEndQuote(stripStartQuote(s))
-//
-//  def removeMentions(content: String): String =
-//    content.replaceAll("<@[0-9]+> ", "")
-//
-//  private def send[A](request: Request[A])(implicit c: CacheSnapshot, ec: ExecutionContext): Future[Unit] =
-//    discordClient.requestsHelper.run(request).value.map(_ => ())
+object DiscordJDA:
+  def live: ZLayer[Any, Nothing, DiscordJDA] =
+    ZLayer(
+      ZIO.succeed(DiscordJDA())
+
+    )
