@@ -30,3 +30,5 @@ libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.5.18" // akka l
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.11.4"
 
 libraryDependencies += "de.sciss" %% "scala-chart" % "0.8.0"
+
+libraryDependencies += "net.dv8tion" % "JDA" % "5.5.1"
