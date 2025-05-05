@@ -33,33 +33,30 @@ object App extends ZIOAppDefault{
       val layer4 = DotaMatchesRepo.ServiceImpl.live
       val layer5 = StatisticsServices.live
       val layer6 = CommandHandler.ServiceImpl.live
-//      val layer7 = Discord.ServiceImpl.liveDiscordClient
-//      val layer8 = Discord.ServiceImpl.live
       val layer7 = DiscordJDA.live
       val layers = ZLayer.make[DiscordJDA & CommandHandler.Service](
         layer1, layer2, layer3, layer4, layer5, layer6, layer7
       )
 
       program.provide(layers)
-//      DiscordJDA.startServer.tap(message => ZIO.succeed(println(message.content))).runDrain
     }
 
 
-  def stripStartQuote(s: String): String =
-    if (s.startsWith("\""))
-      s.substring(1)
-    else
-      s
+    private def stripStartQuote(s: String): String =
+      if (s.startsWith("\""))
+        s.substring(1)
+      else
+        s
 
-  def stripEndQuote(s: String): String =
-    if (s.endsWith("\""))
-      s.substring(0, s.length - 1)
-    else
-      s
+    private def stripEndQuote(s: String): String =
+      if (s.endsWith("\""))
+        s.substring(0, s.length - 1)
+      else
+        s
 
-  def stripQuotes(s: String): String =
-    stripEndQuote(stripStartQuote(s))
+    private def stripQuotes(s: String): String =
+      stripEndQuote(stripStartQuote(s))
 
-  def removeMentions(content: String): String =
-    content.replaceAll("<@[0-9]+> ", "")
+    private def removeMentions(content: String): String =
+      content.replaceAll("<@[0-9]+> ", "")
 }
