@@ -24,9 +24,10 @@ testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.3"
 libraryDependencies += "com.softwaremill.sttp.client4" %% "zio" % "4.0.3"
 
-libraryDependencies += ("net.katsstuff" %% "ackcord" % "0.18.1").cross(CrossVersion.for3Use2_13)
 libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.5.18" // akka logging
 
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.11.4"
 
 libraryDependencies += "de.sciss" %% "scala-chart" % "0.8.0"
+
+libraryDependencies += "net.dv8tion" % "JDA" % "5.5.1"
