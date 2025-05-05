@@ -5,28 +5,29 @@ import nl.wwbakker.services.dota.{Clients, DotaApiRepo, DotaMatchesRepo, HeroRep
 import nl.wwbakker.services.generic.LocalStorageRepo
 import zio.*
 
-object App extends ZIOAppDefault{
+object App extends ZIOAppDefault {
 
     override def run: ZIO[Any & ZIOAppArgs & Scope, Any, Any] = {
-      val program =
-        for {
-          ch <- ZIO.service[CommandHandler.Service]
-          ds <- ZIO.service[DiscordJDA]
-          _ <- ds
-            .startServer
-            .mapZIO(message =>
-              for
-                result <- ch.handleCommand(
-                      args = removeMentions(message.content)
-                    .split(" (?=([^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)").toIndexedSeq.map(stripQuotes),
+      val program = {
+        ZIO.scoped(
+          for {
+            ch <- ZIO.service[CommandHandler.Service]
+            ds <- ZIO.service[DiscordJDA]
+            _ <- ds
+              .startServer
+              .mapZIO(message =>
+                for
+                  result <- ch.handleCommand(
+                    args = removeMentions(message.content)
+                      .split(" (?=([^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)").toIndexedSeq.map(stripQuotes),
                     commandPrefix = "@Wessel's Bot").either
-                _ <- ds.sendMessage(result, message.channel)
-              yield ()
-            )
-            .runDrain
-        } yield ()
-
-
+                  _ <- ds.sendMessage(result, message.channel)
+                yield ()
+              )
+              .runDrain
+          } yield ()
+        )
+      }
       val layer1 = Clients.live ++ LocalStorageRepo.ServiceImpl.live
       val layer2 = DotaApiRepo.ServiceImpl.live
       val layer3 = HeroRepo.ServiceImpl.live
@@ -38,7 +39,7 @@ object App extends ZIOAppDefault{
         layer1, layer2, layer3, layer4, layer5, layer6, layer7
       )
 
-      program.provide(layers)
+      program.provideSome(layers)
     }
 
 

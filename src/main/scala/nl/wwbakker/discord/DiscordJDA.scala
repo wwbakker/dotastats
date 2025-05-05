@@ -1,6 +1,7 @@
 package nl.wwbakker.discord
 
 import net.dv8tion.jda.api.JDABuilder
+import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion
 import net.dv8tion.jda.api.events.ExceptionEvent
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
@@ -37,42 +38,52 @@ class DiscordJDA() {
       }
   }
 
-  def startServer: ZStream[Any, Throwable, Message] =
+  def startServer: ZStream[Scope, Throwable, Message] = {
     ZStream.asyncZIO { (emit: ZStream.Emit[Any, Throwable, Message, Unit]) =>
-      ZIO.attemptBlocking {
-        println("Starting JDA discord client")
-        val intents = GatewayIntent.getIntents(GatewayIntent.DEFAULT)
-        intents.add(GatewayIntent.MESSAGE_CONTENT)
-        val jda = JDABuilder
-          .createLight(token, intents)
-          .addEventListeners(new ListenerAdapter {
-            override def onMessageReceived(event: MessageReceivedEvent): Unit = {
-              val message = event.getMessage
-              val messageContents = message.getContentRaw
-              val mentionIds = message.getMentions.getUsers.asScala.map(_.getId)
-              println(s"message: ${messageContents} - ${mentionIds.mkString(", ")}")
-              if (mentionIds.contains(clientId)) {
-                // Handle the command here
-                println("Command received!")
-                emit(ZIO.succeed(Chunk.single(Message(
-                  content = messageContents,
-                  mentions = mentionIds.toSeq,
-                  channel = event.getChannel
-                ))))
+      ZIO.acquireRelease(
+        ZIO.attemptBlocking {
+          println("Starting JDA discord client")
+          val intents = GatewayIntent.getIntents(GatewayIntent.DEFAULT)
+          intents.add(GatewayIntent.MESSAGE_CONTENT)
+          val jda = JDABuilder
+            .createLight(token, intents)
+            .addEventListeners(new ListenerAdapter {
+              override def onMessageReceived(event: MessageReceivedEvent): Unit = {
+                val message = event.getMessage
+                val messageContents = message.getContentRaw
+                val mentionIds = message.getMentions.getUsers.asScala.map(_.getId)
+                println(s"message: ${messageContents} - ${mentionIds.mkString(", ")}")
+                if (mentionIds.contains(clientId)) {
+                  // Handle the command here
+                  println("Command received!")
+                  emit(ZIO.succeed(Chunk.single(Message(
+                    content = messageContents,
+                    mentions = mentionIds.toSeq,
+                    channel = event.getChannel
+                  ))))
+                }
               }
-            }
 
-            override def onException(event: ExceptionEvent): Unit =
-              emit(ZIO.fail(Some(new Exception("JDA Exception occurred.", event.getCause))))
+              override def onException(event: ExceptionEvent): Unit =
+                emit(ZIO.fail(Some(new Exception("JDA Exception occurred.", event.getCause))))
 
-          })
-          .build()
+            })
+            .build()
 
-        jda.getRestPing.queue(ping => println("Logged in with ping: " + ping))
-
-        jda.awaitReady()
-      }.logError("Error while starting JDA discord client")
+          jda.awaitReady()
+          jda
+        }.logError("Error while starting JDA discord client")
+      )(release = shutdownClient).unit
     }
+  }
+
+  private def shutdownClient(jda: JDA): UIO[Unit] =
+    (for
+      _ <- ZIO.logInfo("Shutting down discord jda client.")
+      _ <- ZIO.attemptBlocking(jda.shutdown()).logError("Error while shutting down.")
+      _ <- ZIO.logInfo("Shutdown successfully triggered.")
+    yield ()
+      ).ignore
 
 }
 
